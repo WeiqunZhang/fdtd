@@ -22,7 +22,7 @@ FDTD::FDTD ()
 
     Box domain(IntVect(0), m_n_cells-1);
     RealBox real_box(prob_lo.begin(), prob_hi.begin());
-    Array<int,AMREX_SPACEDIM> is_periodic{AMREX_D_DECL(0,0,0)};
+    Array<int,AMREX_SPACEDIM> is_periodic{AMREX_D_DECL(1,1,1)};
 
     m_geom.define(domain, real_box, CoordSys::cartesian, is_periodic);
 
