@@ -1,0 +1,16 @@
+# Build outputs
+/main3d.gnu.ex
+/tmp_build_dir/
+
+# AMReX runtime/output artifacts
+/plt*/
+/chk*/
+/Backtrace.*
+/core
+/core.*
+
+# Local editor/OS noise
+.DS_Store
+*.swp
+*.swo
+*~
