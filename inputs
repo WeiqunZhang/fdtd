@@ -4,6 +4,13 @@ fdtd.prob_lo = 0.0 0.0 0.0  # lower-left corner of the domain
 fdtd.prob_hi = 1.0 1.0 1.0  # upper-right corner
 
 fdtd.max_step = 100
-fdtd.plot_int = 10          # write numpy output every N steps (0 = off)
+fdtd.plot_int = 1          # write numpy output every N steps (0 = off)
 fdtd.output_dir = numpy_out # output directory for .bin + .json files
-fdtd.cfl = 0.99
+fdtd.cfl = 0.8
+
+# Sinusoidal plane wave: Ex polarized, propagating in +z, one wavelength in domain
+fdtd.ic = sinwave
+fdtd.sinwave_amplitude = 0.01
+fdtd.sinwave_dir = 2          # 0=+x, 1=+y, 2=+z
+fdtd.sinwave_pol = 0          # 0=Ex, 1=Ey, 2=Ez (must differ from dir)
+fdtd.sinwave_wavelength = -1  # <0: one wavelength along propagation dir (domain length)

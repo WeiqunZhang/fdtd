@@ -17,12 +17,16 @@ using namespace amrex;
 namespace {
 constexpr Real c_light = 2.99792458e8;
 
+// Return the physical coordinate in one direction for a field component that is
+// staggered on a Yee grid: half-cell shifted along its own component direction.
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-Real wave_phase (int dir, Real kw, Real x, Real y, Real z)
+Real staggered_coord (int component, int coord_dir, int i, int j, int k,
+                      GpuArray<Real,AMREX_SPACEDIM> const& problo,
+                      GpuArray<Real,AMREX_SPACEDIM> const& dx)
 {
-    if (dir == 0) { return kw * x; }
-    if (dir == 1) { return kw * y; }
-    return kw * z;
+    int idx = (coord_dir == 0) ? i : ((coord_dir == 1) ? j : k);
+    Real offset = (component == coord_dir) ? 0.5_rt : 0.0_rt;
+    return problo[coord_dir] + (idx + offset) * dx[coord_dir];
 }
 } // namespace
 
@@ -98,71 +102,25 @@ void FDTD::initData ()
     const int dir = m_sinwave_dir;
     const int pol = m_sinwave_pol;
 
-    auto const& exa = m_efields[0].arrays();
-    auto const& eya = m_efields[1].arrays();
-    auto const& eza = m_efields[2].arrays();
-    auto const& bxa = m_bfields[0].arrays();
-    auto const& bya = m_bfields[1].arrays();
-    auto const& bza = m_bfields[2].arrays();
+    auto const& ea = m_efields[pol].arrays();
+    // determine the direction of the magnetic field and its sign based on the right-hand rule
+    const int bdir = 3 - dir - pol;
+    const Real bsign = ((dir + 1) % 3 == pol) ? 1.0_rt : -1.0_rt;
+    auto const& ba = m_bfields[bdir].arrays();
 
-    ParallelFor(m_efields[0], [=] AMREX_GPU_DEVICE (int b, int i, int j, int k)
+    ParallelFor(m_efields[pol], [=] AMREX_GPU_DEVICE (int b, int i, int j, int k)
     {
-        Real x = problo[0] + (i + 0.5_rt) * dx[0];
-        Real y = problo[1] + j * dx[1];
-        Real z = problo[2] + k * dx[2];
-        Real s = std::sin(wave_phase(dir, kw, x, y, z));
-        exa[b](i,j,k) = (pol == 0) ? E0 * s : 0.0_rt;
-    });
-    ParallelFor(m_efields[1], [=] AMREX_GPU_DEVICE (int b, int i, int j, int k)
-    {
-        Real x = problo[0] + i * dx[0];
-        Real y = problo[1] + (j + 0.5_rt) * dx[1];
-        Real z = problo[2] + k * dx[2];
-        Real s = std::sin(wave_phase(dir, kw, x, y, z));
-        eya[b](i,j,k) = (pol == 1) ? E0 * s : 0.0_rt;
-    });
-    ParallelFor(m_efields[2], [=] AMREX_GPU_DEVICE (int b, int i, int j, int k)
-    {
-        Real x = problo[0] + i * dx[0];
-        Real y = problo[1] + j * dx[1];
-        Real z = problo[2] + (k + 0.5_rt) * dx[2];
-        Real s = std::sin(wave_phase(dir, kw, x, y, z));
-        eza[b](i,j,k) = (pol == 2) ? E0 * s : 0.0_rt;
+        Real phase_coord = staggered_coord(pol, dir, i, j, k, problo, dx);
+        Real s = std::sin(kw * phase_coord);
+        ea[b](i,j,k) = E0 * s;
     });
 
     // B = (1/c) k_hat x E for a +dir traveling wave at t=0
-    ParallelFor(m_bfields[0], [=] AMREX_GPU_DEVICE (int b, int i, int j, int k)
+    ParallelFor(m_bfields[bdir], [=] AMREX_GPU_DEVICE (int b, int i, int j, int k)
     {
-        Real x = problo[0] + (i + 0.5_rt) * dx[0];
-        Real y = problo[1] + j * dx[1];
-        Real z = problo[2] + k * dx[2];
-        Real s = std::sin(wave_phase(dir, kw, x, y, z));
-        Real val = 0.0_rt;
-        if (dir == 2 && pol == 1) { val = -B0 * s; }      // +z, Ey -> Bx
-        if (dir == 1 && pol == 2) { val =  B0 * s; }      // +y, Ez -> Bx
-        bxa[b](i,j,k) = val;
-    });
-    ParallelFor(m_bfields[1], [=] AMREX_GPU_DEVICE (int b, int i, int j, int k)
-    {
-        Real x = problo[0] + i * dx[0];
-        Real y = problo[1] + (j + 0.5_rt) * dx[1];
-        Real z = problo[2] + k * dx[2];
-        Real s = std::sin(wave_phase(dir, kw, x, y, z));
-        Real val = 0.0_rt;
-        if (dir == 2 && pol == 0) { val =  B0 * s; }      // +z, Ex -> By
-        if (dir == 0 && pol == 2) { val = -B0 * s; }      // +x, Ez -> By
-        bya[b](i,j,k) = val;
-    });
-    ParallelFor(m_bfields[2], [=] AMREX_GPU_DEVICE (int b, int i, int j, int k)
-    {
-        Real x = problo[0] + i * dx[0];
-        Real y = problo[1] + j * dx[1];
-        Real z = problo[2] + (k + 0.5_rt) * dx[2];
-        Real s = std::sin(wave_phase(dir, kw, x, y, z));
-        Real val = 0.0_rt;
-        if (dir == 1 && pol == 0) { val = -B0 * s; }      // +y, Ex -> Bz
-        if (dir == 0 && pol == 1) { val =  B0 * s; }      // +x, Ey -> Bz
-        bza[b](i,j,k) = val;
+        Real phase_coord = staggered_coord(bdir, dir, i, j, k, problo, dx);
+        Real s = std::sin(kw * phase_coord);
+        ba[b](i,j,k) = bsign * B0 * s;
     });
     Gpu::streamSynchronize();
 
