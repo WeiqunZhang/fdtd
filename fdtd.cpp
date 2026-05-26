@@ -87,9 +87,10 @@ void FDTD::initData ()
         m_bfields[idim].setVal(0);
     }
 
-    if (m_ic != "sinwave") {
-        return;
-    }
+    const bool is_sinwave = (m_ic == "sinwave");
+    const bool is_standing_wave = (m_ic == "standingwave");
+    AMREX_ALWAYS_ASSERT_WITH_MESSAGE(is_sinwave || is_standing_wave,
+                                     "fdtd.ic must be 'sinwave' or 'standingwave'");
 
     AMREX_ALWAYS_ASSERT(m_sinwave_dir >= 0 && m_sinwave_dir < AMREX_SPACEDIM);
     AMREX_ALWAYS_ASSERT(m_sinwave_pol >= 0 && m_sinwave_pol < AMREX_SPACEDIM);
@@ -103,8 +104,6 @@ void FDTD::initData ()
     Real wavelength = (m_sinwave_wavelength > 0) ? m_sinwave_wavelength : domain_len;
     Real kw = 2.0 * M_PI / wavelength;
     Real E0 = m_sinwave_amplitude;
-    Real B0 = E0 / c_light;
-
     const int dir = m_sinwave_dir;
     const int pol = m_sinwave_pol;
 
@@ -121,13 +120,17 @@ void FDTD::initData ()
         ea[b](i,j,k) = E0 * s;
     });
 
-    // B = (1/c) k_hat x E for a +dir traveling wave at t=0
-    ParallelFor(m_bfields[bdir], [=] AMREX_GPU_DEVICE (int b, int i, int j, int k)
-    {
-        Real phase_coord = staggered_coord(bdir, dir, i, j, k, problo, dx);
-        Real s = std::sin(kw * phase_coord);
-        ba[b](i,j,k) = bsign * B0 * s;
-    });
+    if (is_sinwave) {
+        Real B0 = E0 / c_light;
+        // B = (1/c) k_hat x E for a +dir traveling wave at t=0
+        ParallelFor(m_bfields[bdir], [=] AMREX_GPU_DEVICE (int b, int i, int j, int k)
+        {
+            Real phase_coord = staggered_coord(bdir, dir, i, j, k, problo, dx);
+            Real s = std::sin(kw * phase_coord);
+            ba[b](i,j,k) = bsign * B0 * s;
+        });
+    }
+    // For a standing wave at t=0, initialize B to zero and only seed E.
     Gpu::streamSynchronize();
 
     Vector<MultiFab*> efields{AMREX_D_DECL(&m_efields[0], &m_efields[1], &m_efields[2])};
