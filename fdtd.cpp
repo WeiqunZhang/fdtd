@@ -3,6 +3,7 @@
 
 #include <AMReX_MultiFabUtil.H>
 #include <AMReX_ParmParse.H>
+#include <AMReX_PlotFileUtil.H>
 #include <AMReX_Utility.H>
 
 #include <algorithm>
@@ -42,8 +43,13 @@ FDTD::FDTD ()
 
     pp.query("max_step", m_max_step);
     pp.query("plot_int", m_plot_int);
+    pp.query("plot_format", m_plot_format);
     pp.query("cfl", m_cfl);
     pp.query("output_dir", m_output_dir);
+
+    if (m_plot_format != "numpy" && m_plot_format != "visit") {
+        amrex::Abort("fdtd.plot_format must be \"numpy\" or \"visit\"");
+    }
 
     pp.query("ic", m_ic);
     pp.query("sinwave_amplitude", m_sinwave_amplitude);
@@ -130,10 +136,8 @@ void FDTD::initData ()
     amrex::FillBoundary(bfields, m_geom.periodicity());
 }
 
-void FDTD::writeNumpyOutput (int step, Real time) const
+void FDTD::buildCellCenteredPlotMF (MultiFab& plotmf) const
 {
-    MultiFab plotmf(m_grids, m_dmap, 6, 0);
-
     Vector<const MultiFab*> efields{
         AMREX_D_DECL(&m_efields[0], &m_efields[1], &m_efields[2])
     };
@@ -143,6 +147,36 @@ void FDTD::writeNumpyOutput (int step, Real time) const
 
     average_edge_to_cellcenter(plotmf, 0, efields);
     average_face_to_cellcenter(plotmf, 3, bfields);
+}
+
+void FDTD::writePlotOutput (int step, Real time) const
+{
+    if (m_plot_format == "visit") {
+        writeVisitOutput(step, time);
+    } else {
+        writeNumpyOutput(step, time);
+    }
+}
+
+void FDTD::writeVisitOutput (int step, Real time) const
+{
+    MultiFab plotmf(m_grids, m_dmap, 6, 0);
+    buildCellCenteredPlotMF(plotmf);
+
+    const Vector<std::string> varnames = {"Ex", "Ey", "Ez", "Bx", "By", "Bz"};
+    const std::string plotfile = Concatenate(m_output_dir, step);
+
+    if (ParallelDescriptor::MyProc() == 0) {
+        amrex::Print() << "Writing plotfile " << plotfile << " at time " << time << "\n";
+    }
+
+    WriteSingleLevelPlotfile(plotfile, plotmf, varnames, m_geom, time, step);
+}
+
+void FDTD::writeNumpyOutput (int step, Real time) const
+{
+    MultiFab plotmf(m_grids, m_dmap, 6, 0);
+    buildCellCenteredPlotMF(plotmf);
 
     const Box& domain_box = m_geom.Domain();
     const auto lo = domain_box.loVect();
@@ -223,7 +257,7 @@ void FDTD::evolve ()
     Real time = 0.0_rt;
 
     if (m_plot_int > 0) {
-        writeNumpyOutput(0, time);
+        writePlotOutput(0, time);
     }
 
     for (int step = 0; step < m_max_step; ++step)
@@ -296,7 +330,7 @@ void FDTD::evolve ()
         time += dt;
 
         if (m_plot_int > 0 && (step + 1) % m_plot_int == 0) {
-            writeNumpyOutput(step + 1, time);
+            writePlotOutput(step + 1, time);
         }
     }
 }

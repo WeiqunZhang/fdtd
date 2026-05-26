@@ -17,7 +17,10 @@ public:
     void evolve ();
 
 private:
+    void buildCellCenteredPlotMF (amrex::MultiFab& plotmf) const;
+    void writePlotOutput (int step, amrex::Real time) const;
     void writeNumpyOutput (int step, amrex::Real time) const;
+    void writeVisitOutput (int step, amrex::Real time) const;
 
     amrex::IntVect m_n_cells;
     int m_max_grid_size = 64;
@@ -28,6 +31,7 @@ private:
     int m_max_step = 100;
     int m_plot_int = 0;
     amrex::Real m_cfl = 0.99;
+    std::string m_plot_format = "numpy";  // "numpy" or "visit"
     std::string m_output_dir = "numpy_out";
 
     std::string m_ic = "sinwave";

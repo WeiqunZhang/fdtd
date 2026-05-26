@@ -4,6 +4,7 @@
 
 # AMReX runtime/output artifacts
 /plt*/
+*.visit
 /chk*/
 /Backtrace.*
 /core
