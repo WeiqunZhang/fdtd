@@ -1,28 +1,11 @@
 
 #include "fdtd.H"
+#include "init.H"
 #include "util.H"
 
 #include <AMReX_ParmParse.H>
 
-#include <cmath>
-
 using namespace amrex;
-
-namespace {
-constexpr Real c_light = 2.99792458e8;
-
-// Return the physical coordinate in one direction for a field component that is
-// staggered on a Yee grid: half-cell shifted along its own component direction.
-AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-Real staggered_coord (int component, int coord_dir, int i, int j, int k,
-                      GpuArray<Real,AMREX_SPACEDIM> const& problo,
-                      GpuArray<Real,AMREX_SPACEDIM> const& dx)
-{
-    int idx = (coord_dir == 0) ? i : ((coord_dir == 1) ? j : k);
-    Real offset = (component == coord_dir) ? 0.5_rt : 0.0_rt;
-    return problo[coord_dir] + (idx + offset) * dx[coord_dir];
-}
-} // namespace
 
 FDTD::FDTD ()
 {
@@ -75,61 +58,9 @@ FDTD::FDTD ()
 
 void FDTD::initData ()
 {
-    for (int idim = 0; idim < AMREX_SPACEDIM; ++idim) {
-        m_efields[idim].setVal(0);
-        m_bfields[idim].setVal(0);
-    }
-
-    const bool is_sinwave = (m_ic == "sinwave");
-    const bool is_standing_wave = (m_ic == "standingwave");
-    AMREX_ALWAYS_ASSERT_WITH_MESSAGE(is_sinwave || is_standing_wave,
-                                     "fdtd.ic must be 'sinwave' or 'standingwave'");
-
-    AMREX_ALWAYS_ASSERT(m_sinwave_dir >= 0 && m_sinwave_dir < AMREX_SPACEDIM);
-    AMREX_ALWAYS_ASSERT(m_sinwave_pol >= 0 && m_sinwave_pol < AMREX_SPACEDIM);
-    AMREX_ALWAYS_ASSERT(m_sinwave_pol != m_sinwave_dir);
-
-    auto problo = m_geom.ProbLoArray();
-    auto probhi = m_geom.ProbHiArray();
-    auto dx = m_geom.CellSizeArray();
-
-    Real domain_len = probhi[m_sinwave_dir] - problo[m_sinwave_dir];
-    Real wavelength = (m_sinwave_wavelength > 0) ? m_sinwave_wavelength : domain_len;
-    Real kw = 2.0 * M_PI / wavelength;
-    Real E0 = m_sinwave_amplitude;
-    const int dir = m_sinwave_dir;
-    const int pol = m_sinwave_pol;
-
-    auto const& ea = m_efields[pol].arrays();
-    // determine the direction of the magnetic field and its sign based on the right-hand rule
-    const int bdir = 3 - dir - pol;
-    const Real bsign = ((dir + 1) % 3 == pol) ? 1.0_rt : -1.0_rt;
-    auto const& ba = m_bfields[bdir].arrays();
-
-    ParallelFor(m_efields[pol], [=] AMREX_GPU_DEVICE (int b, int i, int j, int k)
-    {
-        Real phase_coord = staggered_coord(pol, dir, i, j, k, problo, dx);
-        Real s = std::sin(kw * phase_coord);
-        ea[b](i,j,k) = E0 * s;
-    });
-
-    if (is_sinwave) {
-        Real B0 = E0 / c_light;
-        // B = (1/c) k_hat x E for a +dir traveling wave at t=0
-        ParallelFor(m_bfields[bdir], [=] AMREX_GPU_DEVICE (int b, int i, int j, int k)
-        {
-            Real phase_coord = staggered_coord(bdir, dir, i, j, k, problo, dx);
-            Real s = std::sin(kw * phase_coord);
-            ba[b](i,j,k) = bsign * B0 * s;
-        });
-    }
-    // For a standing wave at t=0, initialize B to zero and only seed E.
-    Gpu::streamSynchronize();
-
-    Vector<MultiFab*> efields{AMREX_D_DECL(&m_efields[0], &m_efields[1], &m_efields[2])};
-    Vector<MultiFab*> bfields{AMREX_D_DECL(&m_bfields[0], &m_bfields[1], &m_bfields[2])};
-    amrex::FillBoundary(efields, m_geom.periodicity());
-    amrex::FillBoundary(bfields, m_geom.periodicity());
+    InitSetupFields("fdtd", m_ic, m_sinwave_amplitude, m_sinwave_dir,
+                    m_sinwave_pol, m_sinwave_wavelength,
+                    m_geom, m_efields, m_bfields);
 }
 
 void FDTD::evolve ()
