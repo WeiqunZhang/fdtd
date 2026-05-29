@@ -5,14 +5,14 @@ fdtd.prob_hi = 1.0 1.0 1.0  # upper-right corner
 
 fdtd.max_step = 100
 fdtd.plot_int = 1           # write output every N steps (0 = off)
-fdtd.plot_format = numpy    # numpy (.bin + .json) or visit (AMReX plotfiles for VisIt)
+fdtd.plot_format = visit    # numpy (.bin + .json) or visit (AMReX plotfiles for VisIt)
 fdtd.output_dir = plt # numpy: directory; visit: plotfile prefix (e.g. plt -> plt00000)
 fdtd.cfl = 0.8
 
 # Initial condition options:
 #   sinwave        : traveling sinusoidal plane wave
 #   standingwave   : standing wave seeded with E(x) and B=0 at t=0
-fdtd.ic = standingwave
+fdtd.ic = sinwave
 fdtd.sinwave_amplitude = 0.01
 fdtd.sinwave_dir = 2          # 0=+x, 1=+y, 2=+z
 fdtd.sinwave_pol = 0          # 0=Ex, 1=Ey, 2=Ez (must differ from dir)
