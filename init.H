@@ -7,15 +7,15 @@
 
 #include <string>
 
-void InitSetupFields (
-    std::string const& pp_prefix,
-    std::string const& ic,
+void InitSetupFields(
+    std::string const &pp_prefix,
+    std::string const &ic,
     amrex::Real sinwave_amplitude,
     int sinwave_dir,
     int sinwave_pol,
     amrex::Real sinwave_wavelength,
-    amrex::Geometry const& geom,
-    amrex::Array<amrex::MultiFab,AMREX_SPACEDIM>& efields,
-    amrex::Array<amrex::MultiFab,AMREX_SPACEDIM>& bfields);
+    amrex::Geometry const &geom,
+    amrex::Array<amrex::MultiFab, AMREX_SPACEDIM> &efields,
+    amrex::Array<amrex::MultiFab, AMREX_SPACEDIM> &bfields);
 
 #endif
