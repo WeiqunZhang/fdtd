@@ -59,7 +59,7 @@
 \subsection{Maxwell's Equations}
 \begin{subequations}\label{eq:maxwell}
     \begin{align}
-        \nabla \times \mathbf{H} & = \epsilon \frac{\partial \mathbf{E}}{\partial t} + \sigma \mathbf{E}
+        \nabla \times \mathbf{H} & = \varepsilon \frac{\partial \mathbf{E}}{\partial t} + \sigma \mathbf{E}
         \label{eq:maxwell-ampere}                                                                        \\
         \nabla \times \mathbf{E} & = -\mu \frac{\partial \mathbf{H}}{\partial t}
         \label{eq:maxwell-faraday}
@@ -69,11 +69,11 @@
 Expanding \eqref{eq:maxwell-ampere} into components:
 \begin{subequations}\label{eq:e-components}
     \begin{align}
-        \frac{\partial H_z}{\partial y} - \frac{\partial H_y}{\partial z} & = \epsilon \frac{\partial E_x}{\partial t} + \sigma E_x
+        \frac{\partial H_z}{\partial y} - \frac{\partial H_y}{\partial z} & = \varepsilon \frac{\partial E_x}{\partial t} + \sigma E_x
         \label{eq:e-x-component}                                                                                                    \\
-        \frac{\partial H_x}{\partial z} - \frac{\partial H_z}{\partial x} & = \epsilon \frac{\partial E_y}{\partial t} + \sigma E_y
+        \frac{\partial H_x}{\partial z} - \frac{\partial H_z}{\partial x} & = \varepsilon \frac{\partial E_y}{\partial t} + \sigma E_y
         \label{eq:e-y-component}                                                                                                    \\
-        \frac{\partial H_y}{\partial x} - \frac{\partial H_x}{\partial y} & = \epsilon \frac{\partial E_z}{\partial t} + \sigma E_z
+        \frac{\partial H_y}{\partial x} - \frac{\partial H_x}{\partial y} & = \varepsilon \frac{\partial E_z}{\partial t} + \sigma E_z
         \label{eq:e-z-component}
     \end{align}
 \end{subequations}
@@ -126,23 +126,23 @@ This is why the magnetic update below uses forward differences such as $j+1$ and
 
 The explicit Yee FDTD update used here is written in three stages, matching the implementation: first update $\mathbf{H}$ by a half step, then update $\mathbf{E}$ by a full step, and finally update $\mathbf{H}$ by another half step. Define the update coefficients
 \begin{equation}\label{eq:fdtd-coefficients}
-    C_a = \frac{1 - \frac{\sigma \Delta t}{2\epsilon}}{1 + \frac{\sigma \Delta t}{2\epsilon}}, \qquad C_b = \frac{\frac{\Delta t}{\epsilon}}{1 + \frac{\sigma \Delta t}{2\epsilon}}, \qquad D_b = \frac{\Delta t}{\mu},
+    C_a = \frac{2\varepsilon - \sigma \Delta t}{2\varepsilon + \sigma \Delta t}, \qquad C_b = \frac{2\Delta t}{2\varepsilon + \sigma \Delta t}, \qquad D_b = \frac{\Delta t}{\mu},
 \end{equation}
-where $\Delta t$ is the time step, $\epsilon$ is the permittivity, $\mu$ is the permeability, and $\sigma$ is the conductivity.
+where $\Delta t$ is the time step, $\varepsilon$ is the permittivity, $\mu$ is the permeability, and $\sigma$ is the conductivity.
 
 \subsection{First Magnetic Half-Step}
 \begin{subequations}\label{eq:fdtd-first-h-half}
     \begin{align}
-        H_{x,i,j+\frac{1}{2},k+\frac{1}{2}}^{n+\frac{1}{2}} & = H_{x,i,j+\frac{1}{2},k+\frac{1}{2}}^n - \frac{D_b}{2} \left[\frac{E_{z,i,j+1,k+\frac{1}{2}}^n-E_{z,i,j,k+\frac{1}{2}}^n}{\Delta y} - \frac{E_{y,i,j+\frac{1}{2},k+1}^n-E_{y,i,j+\frac{1}{2},k}^n}{\Delta z}\right]
+        H_{x,i,j+\frac{1}{2},k+\frac{1}{2}}^{n+\frac{1}{2}} & = H_{x,i,j+\frac{1}{2},k+\frac{1}{2}}^n - \frac{D_{b,i,j+\frac{1}{2},k+\frac{1}{2}}^{n+\frac{1}{2}}}{2} \left[\frac{E_{z,i,j+1,k+\frac{1}{2}}^n-E_{z,i,j,k+\frac{1}{2}}^n}{\Delta y} - \frac{E_{y,i,j+\frac{1}{2},k+1}^n-E_{y,i,j+\frac{1}{2},k}^n}{\Delta z}\right]
         \label{eq:fdtd-first-hx}                                                                                                                                                                                                                                                    \\
-        H_{y,i+\frac{1}{2},j,k+\frac{1}{2}}^{n+\frac{1}{2}} & = H_{y,i+\frac{1}{2},j,k+\frac{1}{2}}^n - \frac{D_b}{2} \left[\frac{E_{x,i+\frac{1}{2},j,k+1}^n-E_{x,i+\frac{1}{2},j,k}^n}{\Delta z} - \frac{E_{z,i+1,j,k+\frac{1}{2}}^n-E_{z,i,j,k+\frac{1}{2}}^n}{\Delta x}\right]
+        H_{y,i+\frac{1}{2},j,k+\frac{1}{2}}^{n+\frac{1}{2}} & = H_{y,i+\frac{1}{2},j,k+\frac{1}{2}}^n - \frac{D_{y,i+\frac{1}{2},j,k+\frac{1}{2}}^{n+\frac{1}{2}}}{2} \left[\frac{E_{x,i+\frac{1}{2},j,k+1}^n-E_{x,i+\frac{1}{2},j,k}^n}{\Delta z} - \frac{E_{z,i+1,j,k+\frac{1}{2}}^n-E_{z,i,j,k+\frac{1}{2}}^n}{\Delta x}\right]
         \label{eq:fdtd-first-hy}                                                                                                                                                                                                                                                    \\
-        H_{z,i+\frac{1}{2},j+\frac{1}{2},k}^{n+\frac{1}{2}} & = H_{z,i+\frac{1}{2},j+\frac{1}{2},k}^n - \frac{D_b}{2} \left[\frac{E_{y,i+1,j+\frac{1}{2},k}^n-E_{y,i,j+\frac{1}{2},k}^n}{\Delta x} - \frac{E_{x,i+\frac{1}{2},j+1,k}^n-E_{x,i+\frac{1}{2},j,k}^n}{\Delta y}\right].
+        H_{z,i+\frac{1}{2},j+\frac{1}{2},k}^{n+\frac{1}{2}} & = H_{z,i+\frac{1}{2},j+\frac{1}{2},k}^n - \frac{D_{z,i+\frac{1}{2},j+\frac{1}{2},k}^{n+\frac{1}{2}}}{2} \left[\frac{E_{y,i+1,j+\frac{1}{2},k}^n-E_{y,i,j+\frac{1}{2},k}^n}{\Delta x} - \frac{E_{x,i+\frac{1}{2},j+1,k}^n-E_{x,i+\frac{1}{2},j,k}^n}{\Delta y}\right].
         \label{eq:fdtd-first-hz}
     \end{align}
 \end{subequations}
 
-In the AMReX Yee grid, the magnetic field updates are implemented as
+In the AMReX Yee grid, with homogeneous media, the magnetic field updates are implemented as
 \begin{subequations}\label{eq:fdtd-first-h-half-amrex}
     \begin{align}
         B_x(i, j, k) & -= \frac{1}{2\Delta t} \left[\frac{E_z(i, j + 1, k) - E_z(i, j, k)}{\Delta y} - \frac{E_y(i, j, k + 1) - E_y(i, j, k)}{\Delta z}\right]  \\
@@ -154,16 +154,16 @@ In the AMReX Yee grid, the magnetic field updates are implemented as
 \subsection{Electric Full-Step}
 \begin{subequations}\label{eq:fdtd-e-full}
     \begin{align}
-        E_{x,i+\frac{1}{2},j,k}^{n+1} & = C_a E_{x,i+\frac{1}{2},j,k}^n + C_b \left[\frac{H_{z,i+\frac{1}{2},j+\frac{1}{2},k}^{n+\frac{1}{2}}-H_{z,i+\frac{1}{2},j-\frac{1}{2},k}^{n+\frac{1}{2}}}{\Delta y} - \frac{H_{y,i+\frac{1}{2},j,k+\frac{1}{2}}^{n+\frac{1}{2}}-H_{y,i+\frac{1}{2},j,k-\frac{1}{2}}^{n+\frac{1}{2}}}{\Delta z}\right]
+        E_{x,i+\frac{1}{2},j,k}^{n+1} & = C_{a,i+\frac{1}{2},j,k}^{n+1} E_{x,i+\frac{1}{2},j,k}^n + C_{b,i+\frac{1}{2},j,k}^{n+1} \left[\frac{H_{z,i+\frac{1}{2},j+\frac{1}{2},k}^{n+\frac{1}{2}}-H_{z,i+\frac{1}{2},j-\frac{1}{2},k}^{n+\frac{1}{2}}}{\Delta y} - \frac{H_{y,i+\frac{1}{2},j,k+\frac{1}{2}}^{n+\frac{1}{2}}-H_{y,i+\frac{1}{2},j,k-\frac{1}{2}}^{n+\frac{1}{2}}}{\Delta z}\right]
         \label{eq:fdtd-ex}                                                                                                                                                                                                                                                                                                                      \\
-        E_{y,i,j+\frac{1}{2},k}^{n+1} & = C_a E_{y,i,j+\frac{1}{2},k}^n + C_b \left[\frac{H_{x,i,j+\frac{1}{2},k+\frac{1}{2}}^{n+\frac{1}{2}}-H_{x,i,j+\frac{1}{2},k-\frac{1}{2}}^{n+\frac{1}{2}}}{\Delta z} - \frac{H_{z,i+\frac{1}{2},j+\frac{1}{2},k}^{n+\frac{1}{2}}-H_{z,i-\frac{1}{2},j+\frac{1}{2},k}^{n+\frac{1}{2}}}{\Delta x}\right]
+        E_{y,i,j+\frac{1}{2},k}^{n+1} & = C_{a,i,j+\frac{1}{2},k}^{n+1} E_{y,i,j+\frac{1}{2},k}^n + C_{b,i,j+\frac{1}{2},k}^{n+1} \left[\frac{H_{x,i,j+\frac{1}{2},k+\frac{1}{2}}^{n+\frac{1}{2}}-H_{x,i,j+\frac{1}{2},k-\frac{1}{2}}^{n+\frac{1}{2}}}{\Delta z} - \frac{H_{z,i+\frac{1}{2},j+\frac{1}{2},k}^{n+\frac{1}{2}}-H_{z,i-\frac{1}{2},j+\frac{1}{2},k}^{n+\frac{1}{2}}}{\Delta x}\right]
         \label{eq:fdtd-ey}                                                                                                                                                                                                                                                                                                                      \\
-        E_{z,i,j,k+\frac{1}{2}}^{n+1} & = C_a E_{z,i,j,k+\frac{1}{2}}^n + C_b \left[\frac{H_{y,i+\frac{1}{2},j,k+\frac{1}{2}}^{n+\frac{1}{2}}-H_{y,i-\frac{1}{2},j,k+\frac{1}{2}}^{n+\frac{1}{2}}}{\Delta x} - \frac{H_{x,i,j+\frac{1}{2},k+\frac{1}{2}}^{n+\frac{1}{2}}-H_{x,i,j-\frac{1}{2},k+\frac{1}{2}}^{n+\frac{1}{2}}}{\Delta y}\right].
+        E_{z,i,j,k+\frac{1}{2}}^{n+1} & = C_{a,i,j,k+\frac{1}{2}}^{n+1} E_{z,i,j,k+\frac{1}{2}}^n + C_{b,i,j,k+\frac{1}{2}}^{n+1} \left[\frac{H_{y,i+\frac{1}{2},j,k+\frac{1}{2}}^{n+\frac{1}{2}}-H_{y,i-\frac{1}{2},j,k+\frac{1}{2}}^{n+\frac{1}{2}}}{\Delta x} - \frac{H_{x,i,j+\frac{1}{2},k+\frac{1}{2}}^{n+\frac{1}{2}}-H_{x,i,j-\frac{1}{2},k+\frac{1}{2}}^{n+\frac{1}{2}}}{\Delta y}\right].
         \label{eq:fdtd-ez}
     \end{align}
 \end{subequations}
 
-In the AMReX Yee grid, the electric field updates are implemented as
+In the AMReX Yee grid, with homogeneous media, the electric field updates are implemented as
 \begin{subequations}\label{eq:fdtd-e-full-amrex}
     \begin{align}
         E_x(i,j,k) & += c^2 \Delta t \left[\frac{B_z(i,j,k)-B_z(i,j-1,k)}{\Delta y} - \frac{B_y(i,j,k)-B_y(i,j,k-1)}{\Delta z}\right]  \\
@@ -195,17 +195,23 @@ In the AMReX Yee grid, the second magnetic field updates are implemented as
 
 This explicit method is simple and local, but the time step is restricted by the CFL stability condition. For a uniform lossless grid, a typical stability limit is
 \begin{equation}\label{eq:fdtd-cfl}
-    \Delta t \le \frac{1}{c\sqrt{\frac{1}{\Delta x^2}+\frac{1}{\Delta y^2}+\frac{1}{\Delta z^2}}}, \qquad c = \frac{1}{\sqrt{\mu\epsilon}}.
+    \Delta t \le \frac{1}{c\sqrt{\frac{1}{\Delta x^2}+\frac{1}{\Delta y^2}+\frac{1}{\Delta z^2}}}, \qquad c = \frac{1}{\sqrt{\mu\varepsilon}}.
 \end{equation}
 
 
 \section{ADI Method}
 
+The ADI-FDTD update advances the fields by a full time step $\Delta t$ in two half steps of size $\Delta t/2$. Unlike the explicit three-stage leapfrog update above, each ADI half step first updates $\mathbf{E}$ implicitly over $\Delta t/2$, then updates $\mathbf{H}$ explicitly over $\Delta t/2$ from the updated electric field. The first half step treats one set of implicit directions; the second half step treats the complementary directions to complete the cycle. Define the half-step update coefficients
+\begin{equation}\label{eq:adi-half-coefficients}
+    C_a = \frac{4\varepsilon-\sigma\Delta t}{4\varepsilon+\sigma\Delta t}, \qquad C_b = \frac{2\Delta t}{4\varepsilon+\sigma\Delta t}, \qquad D_b = \frac{\Delta t}{2\mu},
+\end{equation}
+where $\Delta t$ is the time step, $\varepsilon$ is the permittivity, $\mu$ is the permeability, and $\sigma$ is the conductivity. These differ from the full-step coefficients in \eqref{eq:fdtd-coefficients} because each electric update uses $\Delta t/2$.
+
 \subsection{First ADI Half-Step}
 
 By equation \eqref{eq:e-x-component},
 \begin{equation}
-    \epsilon_{i+\tfrac12,j,k} \frac{E_{x,i+\tfrac12,j,k}^{n+\frac12}-E_{x,i+\tfrac12,j,k}^{n}}{\Delta t/2} + \sigma_{i+\tfrac12,j,k} \frac{E_{x,i+\tfrac12,j,k}^{n+\frac12}+E_{x,i+\tfrac12,j,k}^{n}}{2} = [H_1],
+    \varepsilon_{i+\tfrac12,j,k} \frac{E_{x,i+\tfrac12,j,k}^{n+\frac12}-E_{x,i+\tfrac12,j,k}^{n}}{\Delta t/2} + \sigma_{i+\tfrac12,j,k} \frac{E_{x,i+\tfrac12,j,k}^{n+\frac12}+E_{x,i+\tfrac12,j,k}^{n}}{2} = [H_1],
     \label{eq:first-e-ex}
 \end{equation}
 where
@@ -214,20 +220,12 @@ where
 \end{equation}
 Rearranging gives
 \begin{equation}
-    \left(\frac{2\epsilon}{\Delta t}+\frac{\sigma}{2}\right) E_{x}^{n+\frac12} = \left(\frac{2\epsilon}{\Delta t}-\frac{\sigma}{2}\right) E_{x}^{n} + [H_1].
+    \left(\frac{2\varepsilon}{\Delta t}+\frac{\sigma}{2}\right) E_{x}^{n+\frac12} = \left(\frac{2\varepsilon}{\Delta t}-\frac{\sigma}{2}\right) E_{x}^{n} + [H_1].
 \end{equation}
 Hence
 \begin{equation}
     E_{x,i+\tfrac12,j,k}^{n+\frac12} = C_{a,i+\tfrac12,j,k}\,E_{x,i+\tfrac12,j,k}^{n} + C_{b,i+\tfrac12,j,k}\,[H_1],
     \label{eq:first-e-ex-adi}
-\end{equation}
-where
-\begin{equation}
-    C_a = \frac{4\epsilon-\sigma\Delta t}{4\epsilon+\sigma\Delta t},
-\end{equation}
-and
-\begin{equation}
-    C_b = \frac{2\Delta t}{4\epsilon+\sigma\Delta t}.
 \end{equation}
 
 By equation \eqref{eq:h-z-component},
@@ -238,38 +236,29 @@ By equation \eqref{eq:h-z-component},
                                                                                                                               & - \frac{E_{y,i+1,j+\tfrac12,k}^{n}-E_{y,i,j+\tfrac12,k}^{n}}{\Delta x}\Big),
     \end{split}
 \end{align}
-where
-\begin{equation}
-    D_{b,i+\tfrac12,j+\tfrac12,k} = \frac{\Delta t}{2\,\mu_{i+\tfrac12,j+\tfrac12,k}}.
-\end{equation}
 
 Substituting the magnetic update into \eqref{eq:first-e-ex-adi} and eliminate $H_{z}^{n+\frac12}$ terms gives
 \begin{align}
     \begin{split}
         E_{x,i+\tfrac12,j,k}^{n+\frac12} & = C_{a,i+\tfrac12,j,k}\,E_{x,i+\tfrac12,j,k}^{n}                                                                                                      \\
-                                         & \quad + \frac{C_{b,i+\tfrac12,j,k}}{\Delta y}\Bigg[H_{z,i+\tfrac12,j+\tfrac12,k}^{n}                                                                \\
-                                         & \qquad + D_{b,i+\tfrac12,j+\tfrac12,k}\left(\frac{E_{x,i+\tfrac12,j+1,k}^{n+\frac12}-E_{x,i+\tfrac12,j,k}^{n+\frac12}}{\Delta y}\right. \\
-                                         & \qquad\qquad\qquad\qquad\qquad\qquad \left. - \frac{E_{y,i+1,j+\tfrac12,k}^{n}-E_{y,i,j+\tfrac12,k}^{n}}{\Delta x}\right)                           \\
-                                         & \qquad - H_{z,i+\tfrac12,j-\tfrac12,k}^{n}                                                                                                                      \\
-                                         & \qquad - D_{b,i+\tfrac12,j-\tfrac12,k}\left(\frac{E_{x,i+\tfrac12,j,k}^{n+\frac12}-E_{x,i+\tfrac12,j-1,k}^{n+\frac12}}{\Delta y}\right. \\
-                                         & \qquad\qquad\qquad\qquad\qquad\qquad \left. - \frac{E_{y,i+1,j-\tfrac12,k}^{n}-E_{y,i,j-\tfrac12,k}^{n}}{\Delta x}\right)\Bigg]                     \\
+                                         & \quad + \frac{C_{b,i+\tfrac12,j,k}}{\Delta y}\Bigg[H_{z,i+\tfrac12,j+\tfrac12,k}^{n} + D_{b,i+\tfrac12,j+\tfrac12,k}\left(\frac{E_{x,i+\tfrac12,j+1,k}^{n+\frac12}-E_{x,i+\tfrac12,j,k}^{n+\frac12}}{\Delta y}\right. \left. - \frac{E_{y,i+1,j+\tfrac12,k}^{n}-E_{y,i,j+\tfrac12,k}^{n}}{\Delta x}\right)                           \\
+                                         & \qquad\qquad\qquad - H_{z,i+\tfrac12,j-\tfrac12,k}^{n} - D_{b,i+\tfrac12,j-\tfrac12,k}\left(\frac{E_{x,i+\tfrac12,j,k}^{n+\frac12}-E_{x,i+\tfrac12,j-1,k}^{n+\frac12}}{\Delta y}\right. \left. - \frac{E_{y,i+1,j-\tfrac12,k}^{n}-E_{y,i,j-\tfrac12,k}^{n}}{\Delta x}\right)\Bigg]                     \\
                                          & \quad - \frac{C_{b,i+\tfrac12,j,k}}{\Delta z}\left(H_{y,i+\tfrac12,j,k+\tfrac12}^{n}-H_{y,i+\tfrac12,j,k-\tfrac12}^{n}\right).
     \end{split}
 \end{align}
 
 Collecting the unknown $E_{x}^{n+\frac12}$ terms gives
-\begin{align}
-    \begin{split}
-        -\frac{C_{b,i+\tfrac12,j,k}\,D_{b,i+\tfrac12,j+\tfrac12,k}}{\Delta y^2}\,                                                                                     & E_{x,i+\tfrac12,j+1,k}^{n+\frac12}                                                 \\
-        + \left[1-\frac{C_{b,i+\tfrac12,j,k}\,D_{b,i+\tfrac12,j+\tfrac12,k}}{\Delta y^2} +\frac{C_{b,i+\tfrac12,j,k}\,D_{b,i+\tfrac12,j-\tfrac12,k}}{\Delta y^2}\right] & E_{x,i+\tfrac12,j,k}^{n+\frac12} \nonumber                                         \\
-        -\frac{C_{b,i+\tfrac12,j,k}\,D_{b,i+\tfrac12,j-\tfrac12,k}}{\Delta y^2}\,                                                                                     & E_{x,i+\tfrac12,j-1,k}^{n+\frac12} \nonumber                                       \\
-        = C_{a,i+\tfrac12,j,k}\,                                                                                                                                     & E_{x,i+\tfrac12,j,k}^{n} \nonumber                                                   \\
-        + \frac{C_{b,i+\tfrac12,j,k}}{\Delta y}                                                                                                                      & \Big(H_{z,i+\tfrac12,j+\tfrac12,k}^{n}-H_{z,i+\tfrac12,j-\tfrac12,k}^{n}\Big) \nonumber \\
-        - \frac{C_{b,i+\tfrac12,j,k}\,D_{b,i+\tfrac12,j+\tfrac12,k}}{\Delta y\,\Delta x}                                                                              & \Big(E_{y,i+1,j+\tfrac12,k}^{n}-E_{y,i,j+\tfrac12,k}^{n}\Big) \nonumber                 \\
-        + \frac{C_{b,i+\tfrac12,j,k}\,D_{b,i+\tfrac12,j-\tfrac12,k}}{\Delta y\,\Delta x}                                                                              & \Big(E_{y,i+1,j-\tfrac12,k}^{n}-E_{y,i,j-\tfrac12,k}^{n}\Big) \nonumber                 \\
-        - \frac{C_{b,i+\tfrac12,j,k}}{\Delta z}                                                                                                                      & \Big(H_{y,i+\tfrac12,j,k+\tfrac12}^{n}-H_{y,i+\tfrac12,j,k-\tfrac12}^{n}\Big).
-    \end{split}
-\end{align}
+\begin{equation}
+    \begin{aligned}
+        & \quad -\frac{C_{b,i+\tfrac12,j,k}\,D_{b,i+\tfrac12,j+\tfrac12,k}}{\Delta y^2}\, E_{x,i+\tfrac12,j+1,k}^{n+\frac12} \\
+        & \quad + \left[1-\frac{C_{b,i+\tfrac12,j,k}\,D_{b,i+\tfrac12,j+\tfrac12,k}}{\Delta y^2} +\frac{C_{b,i+\tfrac12,j,k}\,D_{b,i+\tfrac12,j-\tfrac12,k}}{\Delta y^2}\right] E_{x,i+\tfrac12,j,k}^{n+\frac12} \\
+        & \quad - \frac{C_{b,i+\tfrac12,j,k}\,D_{b,i+\tfrac12,j-\tfrac12,k}}{\Delta y^2}\, E_{x,i+\tfrac12,j-1,k}^{n+\frac12} \\
+        & = C_{a,i+\tfrac12,j,k}\, E_{x,i+\tfrac12,j,k}^{n} + \frac{C_{b,i+\tfrac12,j,k}}{\Delta y} \Big(H_{z,i+\tfrac12,j+\tfrac12,k}^{n}-H_{z,i+\tfrac12,j-\tfrac12,k}^{n}\Big) \\
+        & \quad - \frac{C_{b,i+\tfrac12,j,k}\,D_{b,i+\tfrac12,j+\tfrac12,k}}{\Delta y\,\Delta x} \Big(E_{y,i+1,j+\tfrac12,k}^{n}-E_{y,i,j+\tfrac12,k}^{n}\Big) \\
+        & \quad + \frac{C_{b,i+\tfrac12,j,k}\,D_{b,i+\tfrac12,j-\tfrac12,k}}{\Delta y\,\Delta x} \Big(E_{y,i+1,j-\tfrac12,k}^{n}-E_{y,i,j-\tfrac12,k}^{n}\Big) \\
+        & \quad - \frac{C_{b,i+\tfrac12,j,k}}{\Delta z} \Big(H_{y,i+\tfrac12,j,k+\tfrac12}^{n}-H_{y,i+\tfrac12,j,k-\tfrac12}^{n}\Big).
+    \end{aligned}
+\end{equation}
 
 Equivalently, the tridiagonal system can be written as
 \begin{align}
