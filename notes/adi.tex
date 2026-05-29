@@ -113,13 +113,13 @@ Thus the component locations are
 \end{center}
 
 The half-cell offsets therefore do not appear explicitly as array indices such as $i+\frac{1}{2}$. They are encoded in the \texttt{MultiFab} staggering. The integer offsets in the finite-difference stencil choose the two source values that bracket the field being updated. For example, $H_{x,i,j,k}$ is located at $j+\frac{1}{2}$ in the $y$ direction, while $E_{z,i,j,k}$ and $E_{z,i,j+1,k}$ are located at $j$ and $j+1$. Therefore
-\[
+\begin{equation}
     \left.\frac{\partial E_z}{\partial y}\right|_{H_{x,i,j,k}} \approx \frac{E_{z,i,j+1,k}-E_{z,i,j,k}}{\Delta y}.
-\]
+\end{equation}
 Similarly, $E_{x,i,j,k}$ is located at $j$, while $H_{z,i,j-1,k}$ and $H_{z,i,j,k}$ are located at $j-\frac{1}{2}$ and $j+\frac{1}{2}$, so
-\[
+\begin{equation}
     \left.\frac{\partial H_z}{\partial y}\right|_{E_{x,i,j,k}} \approx \frac{H_{z,i,j,k}-H_{z,i,j-1,k}}{\Delta y}.
-\]
+\end{equation}
 This is why the magnetic update below uses forward differences such as $j+1$ and $k+1$, while the electric update uses backward differences such as $j-1$ and $k-1$: each derivative is centered at the staggered location of the field component being updated.
 
 \section{FDTD Method}
