@@ -145,9 +145,9 @@ where $\Delta t$ is the time step, $\varepsilon$ is the permittivity, $\mu$ is t
 In the AMReX Yee grid, with vacuum media, the magnetic field updates are implemented as
 \begin{subequations}\label{eq:fdtd-first-h-half-amrex}
     \begin{align}
-        B_x(i, j, k) & -= \frac{1}{2\Delta t} \left[\frac{E_z(i, j + 1, k) - E_z(i, j, k)}{\Delta y} - \frac{E_y(i, j, k + 1) - E_y(i, j, k)}{\Delta z}\right]  \\
-        B_y(i, j, k) & -= \frac{1}{2\Delta t} \left[\frac{E_x(i, j, k + 1) - E_x(i, j, k)}{\Delta z} - \frac{E_z(i + 1, j, k) - E_z(i, j, k)}{\Delta x}\right]  \\
-        B_z(i, j, k) & -= \frac{1}{2\Delta t} \left[\frac{E_y(i + 1, j, k) - E_y(i, j, k)}{\Delta x} - \frac{E_x(i, j + 1, k) - E_x(i, j, k)}{\Delta y}\right].
+        B_x(i, j, k) & = B_x(i, j, k) - \frac{1}{2\Delta t} \left[\frac{E_z(i, j + 1, k) - E_z(i, j, k)}{\Delta y} - \frac{E_y(i, j, k + 1) - E_y(i, j, k)}{\Delta z}\right]  \\
+        B_y(i, j, k) & = B_y(i, j, k) - \frac{1}{2\Delta t} \left[\frac{E_x(i, j, k + 1) - E_x(i, j, k)}{\Delta z} - \frac{E_z(i + 1, j, k) - E_z(i, j, k)}{\Delta x}\right]  \\
+        B_z(i, j, k) & = B_z(i, j, k) - \frac{1}{2\Delta t} \left[\frac{E_y(i + 1, j, k) - E_y(i, j, k)}{\Delta x} - \frac{E_x(i, j + 1, k) - E_x(i, j, k)}{\Delta y}\right].
     \end{align}
 \end{subequations}
 
@@ -166,9 +166,9 @@ In the AMReX Yee grid, with vacuum media, the magnetic field updates are impleme
 In the AMReX Yee grid, with vacuum media, the electric field updates are implemented as
 \begin{subequations}\label{eq:fdtd-e-full-amrex}
     \begin{align}
-        E_x(i,j,k) & += c^2 \Delta t \left[\frac{B_z(i,j,k)-B_z(i,j-1,k)}{\Delta y} - \frac{B_y(i,j,k)-B_y(i,j,k-1)}{\Delta z}\right]  \\
-        E_y(i,j,k) & += c^2 \Delta t \left[\frac{B_x(i,j,k)-B_x(i,j,k-1)}{\Delta z} - \frac{B_z(i,j,k)-B_z(i-1,j,k)}{\Delta x}\right]  \\
-        E_z(i,j,k) & += c^2 \Delta t \left[\frac{B_y(i,j,k)-B_y(i-1,j,k)}{\Delta x} - \frac{B_x(i,j,k)-B_x(i,j-1,k)}{\Delta y}\right].
+        E_x(i,j,k) & = E_x(i,j,k) + c^2 \Delta t \left[\frac{B_z(i,j,k)-B_z(i,j-1,k)}{\Delta y} - \frac{B_y(i,j,k)-B_y(i,j,k-1)}{\Delta z}\right]  \\
+        E_y(i,j,k) & = E_y(i,j,k) + c^2 \Delta t \left[\frac{B_x(i,j,k)-B_x(i,j,k-1)}{\Delta z} - \frac{B_z(i,j,k)-B_z(i-1,j,k)}{\Delta x}\right]  \\
+        E_z(i,j,k) & = E_z(i,j,k) + c^2 \Delta t \left[\frac{B_y(i,j,k)-B_y(i-1,j,k)}{\Delta x} - \frac{B_x(i,j,k)-B_x(i,j-1,k)}{\Delta y}\right].
     \end{align}
 \end{subequations}
 
@@ -187,9 +187,9 @@ In the AMReX Yee grid, with vacuum media, the electric field updates are impleme
 In the AMReX Yee grid, with vacuum media, the second magnetic field updates are implemented as
 \begin{subequations}\label{eq:fdtd-second-h-half-amrex}
     \begin{align}
-        B_x(i,j,k) & -= \frac{1}{2\Delta t} \left[\frac{E_z(i,j+1,k)-E_z(i,j,k)}{\Delta y} - \frac{E_y(i,j,k+1)-E_y(i,j,k)}{\Delta z}\right]  \\
-        B_y(i,j,k) & -= \frac{1}{2\Delta t} \left[\frac{E_x(i,j,k+1)-E_x(i,j,k)}{\Delta z} - \frac{E_z(i+1,j,k)-E_z(i,j,k)}{\Delta x}\right]  \\
-        B_z(i,j,k) & -= \frac{1}{2\Delta t} \left[\frac{E_y(i+1,j,k)-E_y(i,j,k)}{\Delta x} - \frac{E_x(i,j+1,k)-E_x(i,j,k)}{\Delta y}\right].
+        B_x(i,j,k) & = B_x(i,j,k) - \frac{1}{2\Delta t} \left[\frac{E_z(i,j+1,k)-E_z(i,j,k)}{\Delta y} - \frac{E_y(i,j,k+1)-E_y(i,j,k)}{\Delta z}\right]  \\
+        B_y(i,j,k) & = B_y(i,j,k) - \frac{1}{2\Delta t} \left[\frac{E_x(i,j,k+1)-E_x(i,j,k)}{\Delta z} - \frac{E_z(i+1,j,k)-E_z(i,j,k)}{\Delta x}\right]  \\
+        B_z(i,j,k) & = B_z(i,j,k) - \frac{1}{2\Delta t} \left[\frac{E_y(i+1,j,k)-E_y(i,j,k)}{\Delta x} - \frac{E_x(i,j+1,k)-E_x(i,j,k)}{\Delta y}\right].
     \end{align}
 \end{subequations}
 
