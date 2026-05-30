@@ -209,6 +209,7 @@ where $\Delta t$ is the time step, $\varepsilon$ is the permittivity, $\mu$ is t
 
 \subsection{First ADI Half-Step}
 
+\paragraph{$E_x$ and $H_z$}
 By equation \eqref{eq:e-x-component},
 \begin{equation}
     \varepsilon_{i+\tfrac12,j,k} \frac{E_{x,i+\tfrac12,j,k}^{n+\frac12}-E_{x,i+\tfrac12,j,k}^{n}}{\Delta t/2} + \sigma_{i+\tfrac12,j,k} \frac{E_{x,i+\tfrac12,j,k}^{n+\frac12}+E_{x,i+\tfrac12,j,k}^{n}}{2} = [H_1],
@@ -229,7 +230,6 @@ Hence
 \end{equation}
 
 By equation \eqref{eq:h-z-component},
-
 \begin{align}
     \begin{split}
         H_{z,i+\tfrac12,j+\tfrac12,k}^{n+\frac12} = H_{z,i+\tfrac12,j+\tfrac12,k}^{n} + D_{b,i+\tfrac12,j+\tfrac12,k}\Big( & \frac{E_{x,i+\tfrac12,j+1,k}^{n+\frac12}-E_{x,i+\tfrac12,j,k}^{n+\frac12}}{\Delta y} \\
@@ -237,7 +237,7 @@ By equation \eqref{eq:h-z-component},
     \end{split}
 \end{align}
 
-Substituting the magnetic update into \eqref{eq:first-e-ex-adi} and eliminate $H_{z}^{n+\frac12}$ terms gives
+Substituting the magnetic update into \eqref{eq:first-e-ex-adi} and eliminating $H_{z}^{n+\frac12}$ terms gives
 \begin{align}
     \begin{split}
         E_{x,i+\tfrac12,j,k}^{n+\frac12} & = C_{a,i+\tfrac12,j,k}\,E_{x,i+\tfrac12,j,k}^{n}                                                                                                      \\
@@ -267,10 +267,16 @@ Equivalently, the tridiagonal system can be written as
     &\quad +\frac{1}{\Delta y}\Big(H_{z,i+\tfrac12,j+\tfrac12,k}^{n}-H_{z,i+\tfrac12,j-\tfrac12,k}^{n}\Big) \nonumber\\
     &\quad -\frac{1}{\Delta z}\Big(H_{y,i+\tfrac12,j,k+\tfrac12}^{n}-H_{y,i+\tfrac12,j,k-\tfrac12}^{n}\Big) \nonumber\\
     &\quad +\frac{q_{x1}}{\Delta x\Delta y}\Big(E_{y,i+1,j-\tfrac12,k}^{n}-E_{y,i,j-\tfrac12,k}^{n}\Big) \nonumber\\
-    &\quad -\frac{r_{x1}}{\Delta x\Delta y}\Big(E_{y,i+1,j+\tfrac12,k}^{n}-E_{y,i,j+\tfrac12,k}^{n}\Big).
+    &\quad -\frac{r_{x1}}{\Delta x\Delta y}\Big(E_{y,i+1,j+\tfrac12,k}^{n}-E_{y,i,j+\tfrac12,k}^{n}\Big),
     \label{eq:first-e-ex-adi-tridiagonal}
 \end{align}
 
+and the magnetic update can be written as
+\begin{equation}
+    H_{z,i+\tfrac12,j+\tfrac12,k}^{n+\frac12} = H_{z,i+\tfrac12,j+\tfrac12,k}^{n} + \frac{r_{x1}}{\Delta y}\Big(E_{x,i+\tfrac12,j+1,k}^{n+\frac12}-E_{x,i+\tfrac12,j,k}^{n+\frac12}\Big) - \frac{r_{x1}}{\Delta x}\Big(E_{y,i+1,j+\tfrac12,k}^{n}-E_{y,i,j+\tfrac12,k}^{n}\Big).
+    \label{eq:adi-first-hz}
+\end{equation}
+where
 \begin{align}
     \alpha_{x1} & =\frac{D_{b,i+\tfrac12,j-\tfrac12,k}}{\Delta y^2},       \\
     \beta_{x1}  & =\frac{1}{C_{b,i+\tfrac12,j,k}}+\alpha_{x1}+\gamma_{x1}, \\
@@ -278,6 +284,160 @@ Equivalently, the tridiagonal system can be written as
     p_{x1}      & =\frac{C_{a,i+\tfrac12,j,k}}{C_{b,i+\tfrac12,j,k}},       \\
     q_{x1}      & =D_{b,i+\tfrac12,j-\tfrac12,k},                          \\
     r_{x1}      & =D_{b,i+\tfrac12,j+\tfrac12,k}.
+\end{align}
+
+\paragraph{$E_y$ and $H_x$}
+By equation \eqref{eq:e-y-component},
+\begin{equation}
+    \varepsilon_{i,j+\tfrac12,k} \frac{E_{y,i,j+\tfrac12,k}^{n+\frac12}-E_{y,i,j+\tfrac12,k}^{n}}{\Delta t/2} + \sigma_{i,j+\tfrac12,k} \frac{E_{y,i,j+\tfrac12,k}^{n+\frac12}+E_{y,i,j+\tfrac12,k}^{n}}{2} = [H_2],
+    \label{eq:first-e-ey}
+\end{equation}
+where
+\begin{equation}
+    [H_2] = \frac{H_{x,i,j+\tfrac12,k+\tfrac12}^{n+\frac12}-H_{x,i,j+\tfrac12,k-\tfrac12}^{n+\frac12}}{\Delta z} - \frac{H_{z,i+\tfrac12,j+\tfrac12,k}^{n}-H_{z,i-\tfrac12,j+\tfrac12,k}^{n}}{\Delta x}.
+\end{equation}
+Rearranging gives
+\begin{equation}
+    \left(\frac{2\varepsilon}{\Delta t}+\frac{\sigma}{2}\right) E_{y}^{n+\frac12} = \left(\frac{2\varepsilon}{\Delta t}-\frac{\sigma}{2}\right) E_{y}^{n} + [H_2].
+\end{equation}
+Hence
+\begin{equation}
+    E_{y,i,j+\tfrac12,k}^{n+\frac12} = C_{a,i,j+\tfrac12,k}\,E_{y,i,j+\tfrac12,k}^{n} + C_{b,i,j+\tfrac12,k}\,[H_2],
+    \label{eq:first-e-ey-adi}
+\end{equation}
+
+By equation \eqref{eq:h-x-component},
+\begin{align}
+    \begin{split}
+        H_{x,i,j+\tfrac12,k+\tfrac12}^{n+\frac12} = H_{x,i,j+\tfrac12,k+\tfrac12}^{n} + D_{b,i,j+\tfrac12,k+\tfrac12}\Big( & \frac{E_{y,i,j+\tfrac12,k+1}^{n+\frac12}-E_{y,i,j+\tfrac12,k}^{n+\frac12}}{\Delta z} \\
+                                                                                                                              & - \frac{E_{z,i,j+1,k+\tfrac12}^{n}-E_{z,i,j,k+\tfrac12}^{n}}{\Delta y}\Big),
+    \end{split}
+\end{align}
+
+Substituting the magnetic update into \eqref{eq:first-e-ey-adi} and eliminating $H_{x}^{n+\frac12}$ terms gives
+\begin{align}
+    \begin{split}
+        E_{y,i,j+\tfrac12,k}^{n+\frac12} & = C_{a,i,j+\tfrac12,k}\,E_{y,i,j+\tfrac12,k}^{n}                                                                                                      \\
+                                         & \quad + \frac{C_{b,i,j+\tfrac12,k}}{\Delta z}\Bigg[H_{x,i,j+\tfrac12,k+\tfrac12}^{n} + D_{b,i,j+\tfrac12,k+\tfrac12}\left(\frac{E_{y,i,j+\tfrac12,k+1}^{n+\frac12}-E_{y,i,j+\tfrac12,k}^{n+\frac12}}{\Delta z}\right. \left. - \frac{E_{z,i,j+1,k+\tfrac12}^{n}-E_{z,i,j,k+\tfrac12}^{n}}{\Delta y}\right)                           \\
+                                         & \qquad\qquad\qquad - H_{x,i,j+\tfrac12,k-\tfrac12}^{n} - D_{b,i,j+\tfrac12,k-\tfrac12}\left(\frac{E_{y,i,j+\tfrac12,k}^{n+\frac12}-E_{y,i,j+\tfrac12,k-1}^{n+\frac12}}{\Delta z}\right. \left. - \frac{E_{z,i,j+1,k-\tfrac12}^{n}-E_{z,i,j,k-\tfrac12}^{n}}{\Delta y}\right)\Bigg]                     \\
+                                         & \quad - \frac{C_{b,i,j+\tfrac12,k}}{\Delta x}\left(H_{z,i+\tfrac12,j+\tfrac12,k}^{n}-H_{z,i-\tfrac12,j+\tfrac12,k}^{n}\right).
+    \end{split}
+\end{align}
+
+Collecting the unknown $E_{y}^{n+\frac12}$ terms gives
+\begin{equation}
+    \begin{aligned}
+        & \quad -\frac{C_{b,i,j+\tfrac12,k}\,D_{b,i,j+\tfrac12,k+\tfrac12}}{\Delta z^2}\, E_{y,i,j+\tfrac12,k+1}^{n+\frac12} \\
+        & \quad + \left[1+\frac{C_{b,i,j+\tfrac12,k}\,D_{b,i,j+\tfrac12,k+\tfrac12}}{\Delta z^2} +\frac{C_{b,i,j+\tfrac12,k}\,D_{b,i,j+\tfrac12,k-\tfrac12}}{\Delta z^2}\right] E_{y,i,j+\tfrac12,k}^{n+\frac12} \\
+        & \quad - \frac{C_{b,i,j+\tfrac12,k}\,D_{b,i,j+\tfrac12,k-\tfrac12}}{\Delta z^2}\, E_{y,i,j+\tfrac12,k-1}^{n+\frac12} \\
+        & = C_{a,i,j+\tfrac12,k}\, E_{y,i,j+\tfrac12,k}^{n} + \frac{C_{b,i,j+\tfrac12,k}}{\Delta z} \Big(H_{x,i,j+\tfrac12,k+\tfrac12}^{n}-H_{x,i,j+\tfrac12,k-\tfrac12}^{n}\Big) \\
+        & \quad - \frac{C_{b,i,j+\tfrac12,k}\,D_{b,i,j+\tfrac12,k+\tfrac12}}{\Delta z\,\Delta y} \Big(E_{z,i,j+1,k+\tfrac12}^{n}-E_{z,i,j,k+\tfrac12}^{n}\Big) \\
+        & \quad + \frac{C_{b,i,j+\tfrac12,k}\,D_{b,i,j+\tfrac12,k-\tfrac12}}{\Delta z\,\Delta y} \Big(E_{z,i,j+1,k-\tfrac12}^{n}-E_{z,i,j,k-\tfrac12}^{n}\Big) \\
+        & \quad - \frac{C_{b,i,j+\tfrac12,k}}{\Delta x} \Big(H_{z,i+\tfrac12,j+\tfrac12,k}^{n}-H_{z,i-\tfrac12,j+\tfrac12,k}^{n}\Big).
+    \end{aligned}
+\end{equation}
+
+Equivalently, the tridiagonal system can be written as
+\begin{align}
+    -\alpha_{y1}E_{y,i,j+\tfrac12,k-1}^{n+\frac12} + \beta_{y1}E_{y,i,j+\tfrac12,k}^{n+\frac12} - \gamma_{y1}E_{y,i,j+\tfrac12,k+1}^{n+\frac12}
+    &= p_{y1}E_{y,i,j+\tfrac12,k}^{n} \nonumber\\
+    &\quad +\frac{1}{\Delta z}\Big(H_{x,i,j+\tfrac12,k+\tfrac12}^{n}-H_{x,i,j+\tfrac12,k-\tfrac12}^{n}\Big) \nonumber\\
+    &\quad -\frac{1}{\Delta x}\Big(H_{z,i+\tfrac12,j+\tfrac12,k}^{n}-H_{z,i-\tfrac12,j+\tfrac12,k}^{n}\Big) \nonumber\\
+    &\quad +\frac{q_{y1}}{\Delta y\Delta z}\Big(E_{z,i,j+1,k-\tfrac12}^{n}-E_{z,i,j,k-\tfrac12}^{n}\Big) \nonumber\\
+    &\quad -\frac{r_{y1}}{\Delta y\Delta z}\Big(E_{z,i,j+1,k+\tfrac12}^{n}-E_{z,i,j,k+\tfrac12}^{n}\Big),
+    \label{eq:first-e-ey-adi-tridiagonal}
+\end{align}
+
+and the magnetic update can be written as
+\begin{equation}
+    H_{x,i,j+\tfrac12,k+\tfrac12}^{n+\frac12} = H_{x,i,j+\tfrac12,k+\tfrac12}^{n} + \frac{r_{y1}}{\Delta z}\Big(E_{y,i,j+\tfrac12,k+1}^{n+\frac12}-E_{y,i,j+\tfrac12,k}^{n+\frac12}\Big) - \frac{r_{y1}}{\Delta y}\Big(E_{z,i,j+1,k+\tfrac12}^{n}-E_{z,i,j,k+\tfrac12}^{n}\Big).
+    \label{eq:adi-first-hx}
+\end{equation}
+where
+\begin{align}
+    \alpha_{y1} & =\frac{D_{b,i,j+\tfrac12,k-\tfrac12}}{\Delta z^2},       \\
+    \beta_{y1}  & =\frac{1}{C_{b,i,j+\tfrac12,k}}+\alpha_{y1}+\gamma_{y1}, \\
+    \gamma_{y1} & =\frac{D_{b,i,j+\tfrac12,k+\tfrac12}}{\Delta z^2},       \\
+    p_{y1}      & =\frac{C_{a,i,j+\tfrac12,k}}{C_{b,i,j+\tfrac12,k}},       \\
+    q_{y1}      & =D_{b,i,j+\tfrac12,k-\tfrac12},                           \\
+    r_{y1}      & =D_{b,i,j+\tfrac12,k+\tfrac12}.
+\end{align}
+
+\paragraph{$E_z$ and $H_y$}
+By equation \eqref{eq:e-z-component},
+\begin{equation}
+    \varepsilon_{i,j,k+\tfrac12} \frac{E_{z,i,j,k+\tfrac12}^{n+\frac12}-E_{z,i,j,k+\tfrac12}^{n}}{\Delta t/2} + \sigma_{i,j,k+\tfrac12} \frac{E_{z,i,j,k+\tfrac12}^{n+\frac12}+E_{z,i,j,k+\tfrac12}^{n}}{2} = [H_3],
+    \label{eq:first-e-ez}
+\end{equation}
+where
+\begin{equation}
+    [H_3] = \frac{H_{y,i+\tfrac12,j,k+\tfrac12}^{n+\frac12}-H_{y,i-\tfrac12,j,k+\tfrac12}^{n+\frac12}}{\Delta x} - \frac{H_{x,i,j+\tfrac12,k+\tfrac12}^{n}-H_{x,i,j-\tfrac12,k+\tfrac12}^{n}}{\Delta y}.
+\end{equation}
+Rearranging gives
+\begin{equation}
+    \left(\frac{2\varepsilon}{\Delta t}+\frac{\sigma}{2}\right) E_{z}^{n+\frac12} = \left(\frac{2\varepsilon}{\Delta t}-\frac{\sigma}{2}\right) E_{z}^{n} + [H_3].
+\end{equation}
+Hence
+\begin{equation}
+    E_{z,i,j,k+\tfrac12}^{n+\frac12} = C_{a,i,j,k+\tfrac12}\,E_{z,i,j,k+\tfrac12}^{n} + C_{b,i,j,k+\tfrac12}\,[H_3],
+    \label{eq:first-e-ez-adi}
+\end{equation}
+
+By equation \eqref{eq:h-y-component},
+\begin{align}
+    \begin{split}
+        H_{y,i+\tfrac12,j,k+\tfrac12}^{n+\frac12} = H_{y,i+\tfrac12,j,k+\tfrac12}^{n} + D_{b,i+\tfrac12,j,k+\tfrac12}\Big( & \frac{E_{z,i+1,j,k+\tfrac12}^{n+\frac12}-E_{z,i,j,k+\tfrac12}^{n+\frac12}}{\Delta x} \\
+                                                                                                                              & - \frac{E_{x,i+\tfrac12,j,k+1}^{n}-E_{x,i+\tfrac12,j,k}^{n}}{\Delta z}\Big),
+    \end{split}
+\end{align}
+
+Substituting the magnetic update into \eqref{eq:first-e-ez-adi} and eliminating $H_{y}^{n+\frac12}$ terms gives
+\begin{align}
+    \begin{split}
+        E_{z,i,j,k+\tfrac12}^{n+\frac12} & = C_{a,i,j,k+\tfrac12}\,E_{z,i,j,k+\tfrac12}^{n}                                                                                                      \\
+                                         & \quad + \frac{C_{b,i,j,k+\tfrac12}}{\Delta x}\Bigg[H_{y,i+\tfrac12,j,k+\tfrac12}^{n} + D_{b,i+\tfrac12,j,k+\tfrac12}\left(\frac{E_{z,i+1,j,k+\tfrac12}^{n+\frac12}-E_{z,i,j,k+\tfrac12}^{n+\frac12}}{\Delta x}\right. \left. - \frac{E_{x,i+\tfrac12,j,k+1}^{n}-E_{x,i+\tfrac12,j,k}^{n}}{\Delta z}\right)                           \\
+                                         & \qquad\qquad\qquad - H_{y,i-\tfrac12,j,k+\tfrac12}^{n} - D_{b,i-\tfrac12,j,k+\tfrac12}\left(\frac{E_{z,i,j,k+\tfrac12}^{n+\frac12}-E_{z,i-1,j,k+\tfrac12}^{n+\frac12}}{\Delta x}\right. \left. - \frac{E_{x,i-\tfrac12,j,k+1}^{n}-E_{x,i-\tfrac12,j,k}^{n}}{\Delta z}\right)\Bigg]                     \\
+                                         & \quad - \frac{C_{b,i,j,k+\tfrac12}}{\Delta y}\left(H_{x,i,j+\tfrac12,k+\tfrac12}^{n}-H_{x,i,j-\tfrac12,k+\tfrac12}^{n}\right).
+    \end{split}
+\end{align}
+
+Collecting the unknown $E_{z}^{n+\frac12}$ terms gives
+\begin{equation}
+    \begin{aligned}
+        & \quad -\frac{C_{b,i,j,k+\tfrac12}\,D_{b,i+\tfrac12,j,k+\tfrac12}}{\Delta x^2}\, E_{z,i+1,j,k+\tfrac12}^{n+\frac12} \\
+        & \quad + \left[1+\frac{C_{b,i,j,k+\tfrac12}\,D_{b,i+\tfrac12,j,k+\tfrac12}}{\Delta x^2} +\frac{C_{b,i,j,k+\tfrac12}\,D_{b,i-\tfrac12,j,k+\tfrac12}}{\Delta x^2}\right] E_{z,i,j,k+\tfrac12}^{n+\frac12} \\
+        & \quad - \frac{C_{b,i,j,k+\tfrac12}\,D_{b,i-\tfrac12,j,k+\tfrac12}}{\Delta x^2}\, E_{z,i-1,j,k+\tfrac12}^{n+\frac12} \\
+        & = C_{a,i,j,k+\tfrac12}\, E_{z,i,j,k+\tfrac12}^{n} + \frac{C_{b,i,j,k+\tfrac12}}{\Delta x} \Big(H_{y,i+\tfrac12,j,k+\tfrac12}^{n}-H_{y,i-\tfrac12,j,k+\tfrac12}^{n}\Big) \\
+        & \quad - \frac{C_{b,i,j,k+\tfrac12}\,D_{b,i+\tfrac12,j,k+\tfrac12}}{\Delta x\,\Delta z} \Big(E_{x,i+\tfrac12,j,k+1}^{n}-E_{x,i+\tfrac12,j,k}^{n}\Big) \\
+        & \quad + \frac{C_{b,i,j,k+\tfrac12}\,D_{b,i-\tfrac12,j,k+\tfrac12}}{\Delta x\,\Delta z} \Big(E_{x,i-\tfrac12,j,k+1}^{n}-E_{x,i-\tfrac12,j,k}^{n}\Big) \\
+        & \quad - \frac{C_{b,i,j,k+\tfrac12}}{\Delta y} \Big(H_{x,i,j+\tfrac12,k+\tfrac12}^{n}-H_{x,i,j-\tfrac12,k+\tfrac12}^{n}\Big).
+    \end{aligned}
+\end{equation}
+
+Equivalently, the tridiagonal system can be written as
+\begin{align}
+    -\alpha_{z1}E_{z,i-1,j,k+\tfrac12}^{n+\frac12} + \beta_{z1}E_{z,i,j,k+\tfrac12}^{n+\frac12} - \gamma_{z1}E_{z,i+1,j,k+\tfrac12}^{n+\frac12}
+    &= p_{z1}E_{z,i,j,k+\tfrac12}^{n} \nonumber\\
+    &\quad +\frac{1}{\Delta x}\Big(H_{y,i+\tfrac12,j,k+\tfrac12}^{n}-H_{y,i-\tfrac12,j,k+\tfrac12}^{n}\Big) \nonumber\\
+    &\quad -\frac{1}{\Delta y}\Big(H_{x,i,j+\tfrac12,k+\tfrac12}^{n}-H_{x,i,j-\tfrac12,k+\tfrac12}^{n}\Big) \nonumber\\
+    &\quad +\frac{q_{z1}}{\Delta z\Delta x}\Big(E_{x,i-\tfrac12,j,k+1}^{n}-E_{x,i-\tfrac12,j,k}^{n}\Big) \nonumber\\
+    &\quad -\frac{r_{z1}}{\Delta z\Delta x}\Big(E_{x,i+\tfrac12,j,k+1}^{n}-E_{x,i+\tfrac12,j,k}^{n}\Big),
+    \label{eq:first-e-ez-adi-tridiagonal}
+\end{align}
+
+and the magnetic update can be written as
+\begin{equation}
+    H_{y,i+\tfrac12,j,k+\tfrac12}^{n+\frac12} = H_{y,i+\tfrac12,j,k+\tfrac12}^{n} + \frac{r_{z1}}{\Delta x}\Big(E_{z,i+1,j,k+\tfrac12}^{n+\frac12}-E_{z,i,j,k+\tfrac12}^{n+\frac12}\Big) - \frac{r_{z1}}{\Delta z}\Big(E_{x,i+\tfrac12,j,k+1}^{n}-E_{x,i+\tfrac12,j,k}^{n}\Big).
+    \label{eq:adi-first-hy}
+\end{equation}
+where
+\begin{align}
+    \alpha_{z1} & =\frac{D_{b,i-\tfrac12,j,k+\tfrac12}}{\Delta x^2},       \\
+    \beta_{z1}  & =\frac{1}{C_{b,i,j,k+\tfrac12}}+\alpha_{z1}+\gamma_{z1}, \\
+    \gamma_{z1} & =\frac{D_{b,i+\tfrac12,j,k+\tfrac12}}{\Delta x^2},       \\
+    p_{z1}      & =\frac{C_{a,i,j,k+\tfrac12}}{C_{b,i,j,k+\tfrac12}},       \\
+    q_{z1}      & =D_{b,i-\tfrac12,j,k+\tfrac12},                           \\
+    r_{z1}      & =D_{b,i+\tfrac12,j,k+\tfrac12}.
 \end{align}
 
 \end{document}
