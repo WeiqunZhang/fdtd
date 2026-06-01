@@ -15,7 +15,38 @@ public:
     void initData();
     void evolve();
 
+    // First ADI half-step (eq:adi-first-half-amrex in notes/adi.tex)
+    void adiFirstHalfStep(amrex::Real dt);
+    // Second ADI half-step (eq:adi-second-half-amrex in notes/adi.tex)
+    void adiSecondHalfStep(amrex::Real dt);
+
+    // buildRhs / solveImplicit stubs (to be filled in later)
+    amrex::MultiFab buildRhsEx1(amrex::Real dt) const;
+    amrex::MultiFab buildRhsEy1(amrex::Real dt) const;
+    amrex::MultiFab buildRhsEz1(amrex::Real dt) const;
+    void solveImplicitEx1(amrex::MultiFab &ex, amrex::MultiFab const &rhs,
+                          amrex::Real dt) const;
+    void solveImplicitEy1(amrex::MultiFab &ey, amrex::MultiFab const &rhs,
+                          amrex::Real dt) const;
+    void solveImplicitEz1(amrex::MultiFab &ez, amrex::MultiFab const &rhs,
+                          amrex::Real dt) const;
+
+    amrex::MultiFab buildRhsEx2(amrex::Real dt) const;
+    amrex::MultiFab buildRhsEy2(amrex::Real dt) const;
+    amrex::MultiFab buildRhsEz2(amrex::Real dt) const;
+    void solveImplicitEx2(amrex::MultiFab &ex, amrex::MultiFab const &rhs,
+                          amrex::Real dt) const;
+    void solveImplicitEy2(amrex::MultiFab &ey, amrex::MultiFab const &rhs,
+                          amrex::Real dt) const;
+    void solveImplicitEz2(amrex::MultiFab &ez, amrex::MultiFab const &rhs,
+                          amrex::Real dt) const;
+
 private:
+    // Explicit B += (dt/2) curl E (eq:adi-first/second-half-amrex magnetic rows)
+    void stepBx(amrex::Real dt);
+    void stepBy(amrex::Real dt);
+    void stepBz(amrex::Real dt);
+
     amrex::IntVect m_n_cells;
     int m_max_grid_size = 64;
     amrex::Geometry m_geom;
