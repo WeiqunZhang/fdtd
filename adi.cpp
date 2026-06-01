@@ -7,7 +7,7 @@
 
 using namespace amrex;
 
-ADI::ADI ()
+ADI::ADI()
 {
     ParmParse pp("adi");
     pp.getarr("n_cells", m_n_cells);
@@ -23,7 +23,8 @@ ADI::ADI ()
     pp.query("cfl", m_cfl);
     pp.query("output_dir", m_output_dir);
 
-    if (m_plot_format != "numpy" && m_plot_format != "visit") {
+    if (m_plot_format != "numpy" && m_plot_format != "visit")
+    {
         amrex::Abort("adi.plot_format must be \"numpy\" or \"visit\"");
     }
 
@@ -37,9 +38,9 @@ ADI::ADI ()
     pp.query("pulse_center", m_pulse_center);
     pp.query("pulse_sigma", m_pulse_sigma);
 
-    Box domain(IntVect(0), m_n_cells-1);
+    Box domain(IntVect(0), m_n_cells - 1);
     RealBox real_box(prob_lo.begin(), prob_hi.begin());
-    Array<int,AMREX_SPACEDIM> is_periodic{AMREX_D_DECL(1,1,1)};
+    Array<int, AMREX_SPACEDIM> is_periodic{AMREX_D_DECL(1, 1, 1)};
 
     m_geom.define(domain, real_box, CoordSys::cartesian, is_periodic);
 
@@ -49,44 +50,47 @@ ADI::ADI ()
     m_dmap.define(m_grids);
 
     static_assert(AMREX_SPACEDIM == 3, "3D only");
-    for (int idim = 0; idim < AMREX_SPACEDIM; ++idim) {
+    for (int idim = 0; idim < AMREX_SPACEDIM; ++idim)
+    {
         IntVect etyp(1); // nodal by default
         etyp[idim] = 0;  // cell-centered in idim-direction
-        m_efields[idim].define(amrex::convert(m_grids,etyp), m_dmap,
+        m_efields[idim].define(amrex::convert(m_grids, etyp), m_dmap,
                                1, 1); // one component, one ghost
-        IntVect btyp(0); // cell-centerd by default
-        btyp[idim] = 1;  // nodal in idim-direction
-        m_bfields[idim].define(amrex::convert(m_grids,btyp), m_dmap, 1, 1);
+        IntVect btyp(0);              // cell-centerd by default
+        btyp[idim] = 1;               // nodal in idim-direction
+        m_bfields[idim].define(amrex::convert(m_grids, btyp), m_dmap, 1, 1);
     }
 }
 
-void ADI::initData ()
+void ADI::initData()
 {
     InitSetupFields("adi", m_ic, m_ic_amplitude, m_ic_dir,
                     m_ic_pol, m_ic_wavelength, m_pulse_center, m_pulse_sigma,
                     m_geom, m_efields, m_bfields);
 }
 
-void ADI::evolve ()
+void ADI::evolve()
 {
     constexpr Real c = 2.99792458e8;
 
     auto dxinv = m_geom.InvCellSizeArray();
     // 3D Yee CFL: dt <= cfl / (c * sqrt(sum_i 1/dx_i^2))  (see notes/adi.tex)
     Real inv_dx2_sum = 0.0_rt;
-    for (int idim = 0; idim < AMREX_SPACEDIM; ++idim) {
-        inv_dx2_sum += dxinv[idim]*dxinv[idim];
+    for (int idim = 0; idim < AMREX_SPACEDIM; ++idim)
+    {
+        inv_dx2_sum += dxinv[idim] * dxinv[idim];
     }
     Real dt = m_cfl / (c * std::sqrt(inv_dx2_sum));
-    Real c2dt = c*c*dt;
+    Real c2dt = c * c * dt;
 
     auto const period = m_geom.periodicity();
-    Vector<MultiFab*> efields{AMREX_D_DECL(&m_efields[0], &m_efields[1], &m_efields[2])};
-    Vector<MultiFab*> bfields{AMREX_D_DECL(&m_bfields[0], &m_bfields[1], &m_bfields[2])};
+    Vector<MultiFab *> efields{AMREX_D_DECL(&m_efields[0], &m_efields[1], &m_efields[2])};
+    Vector<MultiFab *> bfields{AMREX_D_DECL(&m_bfields[0], &m_bfields[1], &m_bfields[2])};
 
     Real time = 0.0_rt;
 
-    if (m_plot_int > 0) {
+    if (m_plot_int > 0)
+    {
         UtilWritePlotOutput(m_plot_format, m_output_dir, 0, time,
                             m_grids, m_dmap, m_geom, m_efields, m_bfields);
     }
@@ -95,72 +99,46 @@ void ADI::evolve ()
     {
         amrex::FillBoundary(efields, period);
 
-        auto const& bx = m_bfields[0].arrays();
-        auto const& by = m_bfields[1].arrays();
-        auto const& bz = m_bfields[2].arrays();
-        auto const& ex = m_efields[0].arrays();
-        auto const& ey = m_efields[1].arrays();
-        auto const& ez = m_efields[2].arrays();
+        auto const &bx = m_bfields[0].arrays();
+        auto const &by = m_bfields[1].arrays();
+        auto const &bz = m_bfields[2].arrays();
+        auto const &ex = m_efields[0].arrays();
+        auto const &ey = m_efields[1].arrays();
+        auto const &ez = m_efields[2].arrays();
 
-        Real halfdt = 0.5_rt*dt;
-        ParallelFor(m_bfields[0], [=] AMREX_GPU_DEVICE (int b, int i, int j, int k)
-        {
-            bx[b](i,j,k) -= halfdt * (dxinv[1]*(ez[b](i,j+1,k) - ez[b](i,j,k))
-                                    - dxinv[2]*(ey[b](i,j,k+1) - ey[b](i,j,k)));
-        });
-        ParallelFor(m_bfields[1], [=] AMREX_GPU_DEVICE (int b, int i, int j, int k)
-        {
-            by[b](i,j,k) -= halfdt * (dxinv[2]*(ex[b](i,j,k+1) - ex[b](i,j,k))
-                                    - dxinv[0]*(ez[b](i+1,j,k) - ez[b](i,j,k)));
-        });
-        ParallelFor(m_bfields[2], [=] AMREX_GPU_DEVICE (int b, int i, int j, int k)
-        {
-            bz[b](i,j,k) -= halfdt * (dxinv[0]*(ey[b](i+1,j,k) - ey[b](i,j,k))
-                                    - dxinv[1]*(ex[b](i,j+1,k) - ex[b](i,j,k)));
-        });
+        Real halfdt = 0.5_rt * dt;
+        ParallelFor(m_bfields[0], [=] AMREX_GPU_DEVICE(int b, int i, int j, int k)
+                    { bx[b](i, j, k) -= halfdt * (dxinv[1] * (ez[b](i, j + 1, k) - ez[b](i, j, k)) - dxinv[2] * (ey[b](i, j, k + 1) - ey[b](i, j, k))); });
+        ParallelFor(m_bfields[1], [=] AMREX_GPU_DEVICE(int b, int i, int j, int k)
+                    { by[b](i, j, k) -= halfdt * (dxinv[2] * (ex[b](i, j, k + 1) - ex[b](i, j, k)) - dxinv[0] * (ez[b](i + 1, j, k) - ez[b](i, j, k))); });
+        ParallelFor(m_bfields[2], [=] AMREX_GPU_DEVICE(int b, int i, int j, int k)
+                    { bz[b](i, j, k) -= halfdt * (dxinv[0] * (ey[b](i + 1, j, k) - ey[b](i, j, k)) - dxinv[1] * (ex[b](i, j + 1, k) - ex[b](i, j, k))); });
         Gpu::streamSynchronize();
 
         amrex::FillBoundary(bfields, period);
 
-        ParallelFor(m_efields[0], [=] AMREX_GPU_DEVICE (int b, int i, int j, int k)
-        {
-            ex[b](i,j,k) += c2dt * (dxinv[1]*(bz[b](i,j,k) - bz[b](i,j-1,k))
-                                  - dxinv[2]*(by[b](i,j,k) - by[b](i,j,k-1)));
-        });
-        ParallelFor(m_efields[1], [=] AMREX_GPU_DEVICE (int b, int i, int j, int k)
-        {
-            ey[b](i,j,k) += c2dt * (dxinv[2]*(bx[b](i,j,k) - bx[b](i,j,k-1))
-                                  - dxinv[0]*(bz[b](i,j,k) - bz[b](i-1,j,k)));
-        });
-        ParallelFor(m_efields[2], [=] AMREX_GPU_DEVICE (int b, int i, int j, int k)
-        {
-            ez[b](i,j,k) += c2dt * (dxinv[0]*(by[b](i,j,k) - by[b](i-1,j,k))
-                                  - dxinv[1]*(bx[b](i,j,k) - bx[b](i,j-1,k)));
-        });
+        ParallelFor(m_efields[0], [=] AMREX_GPU_DEVICE(int b, int i, int j, int k)
+                    { ex[b](i, j, k) += c2dt * (dxinv[1] * (bz[b](i, j, k) - bz[b](i, j - 1, k)) - dxinv[2] * (by[b](i, j, k) - by[b](i, j, k - 1))); });
+        ParallelFor(m_efields[1], [=] AMREX_GPU_DEVICE(int b, int i, int j, int k)
+                    { ey[b](i, j, k) += c2dt * (dxinv[2] * (bx[b](i, j, k) - bx[b](i, j, k - 1)) - dxinv[0] * (bz[b](i, j, k) - bz[b](i - 1, j, k))); });
+        ParallelFor(m_efields[2], [=] AMREX_GPU_DEVICE(int b, int i, int j, int k)
+                    { ez[b](i, j, k) += c2dt * (dxinv[0] * (by[b](i, j, k) - by[b](i - 1, j, k)) - dxinv[1] * (bx[b](i, j, k) - bx[b](i, j - 1, k))); });
         Gpu::streamSynchronize();
 
         amrex::FillBoundary(efields, period);
 
-        ParallelFor(m_bfields[0], [=] AMREX_GPU_DEVICE (int b, int i, int j, int k)
-        {
-            bx[b](i,j,k) -= halfdt * (dxinv[1]*(ez[b](i,j+1,k) - ez[b](i,j,k))
-                                    - dxinv[2]*(ey[b](i,j,k+1) - ey[b](i,j,k)));
-        });
-        ParallelFor(m_bfields[1], [=] AMREX_GPU_DEVICE (int b, int i, int j, int k)
-        {
-            by[b](i,j,k) -= halfdt * (dxinv[2]*(ex[b](i,j,k+1) - ex[b](i,j,k))
-                                    - dxinv[0]*(ez[b](i+1,j,k) - ez[b](i,j,k)));
-        });
-        ParallelFor(m_bfields[2], [=] AMREX_GPU_DEVICE (int b, int i, int j, int k)
-        {
-            bz[b](i,j,k) -= halfdt * (dxinv[0]*(ey[b](i+1,j,k) - ey[b](i,j,k))
-                                    - dxinv[1]*(ex[b](i,j+1,k) - ex[b](i,j,k)));
-        });
+        ParallelFor(m_bfields[0], [=] AMREX_GPU_DEVICE(int b, int i, int j, int k)
+                    { bx[b](i, j, k) -= halfdt * (dxinv[1] * (ez[b](i, j + 1, k) - ez[b](i, j, k)) - dxinv[2] * (ey[b](i, j, k + 1) - ey[b](i, j, k))); });
+        ParallelFor(m_bfields[1], [=] AMREX_GPU_DEVICE(int b, int i, int j, int k)
+                    { by[b](i, j, k) -= halfdt * (dxinv[2] * (ex[b](i, j, k + 1) - ex[b](i, j, k)) - dxinv[0] * (ez[b](i + 1, j, k) - ez[b](i, j, k))); });
+        ParallelFor(m_bfields[2], [=] AMREX_GPU_DEVICE(int b, int i, int j, int k)
+                    { bz[b](i, j, k) -= halfdt * (dxinv[0] * (ey[b](i + 1, j, k) - ey[b](i, j, k)) - dxinv[1] * (ex[b](i, j + 1, k) - ex[b](i, j, k))); });
         Gpu::streamSynchronize();
 
         time += dt;
 
-        if (m_plot_int > 0 && (step + 1) % m_plot_int == 0) {
+        if (m_plot_int > 0 && (step + 1) % m_plot_int == 0)
+        {
             UtilWritePlotOutput(m_plot_format, m_output_dir, step + 1, time,
                                 m_grids, m_dmap, m_geom, m_efields, m_bfields);
         }
