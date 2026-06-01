@@ -7,6 +7,7 @@
 #include <AMReX_ParmParse.H>
 
 #include <cmath>
+#include <vector>
 
 using namespace amrex;
 
@@ -15,6 +16,183 @@ namespace
     MultiFab makeRhsLike(MultiFab const &field)
     {
         return MultiFab(field.boxArray(), field.DistributionMap(), 1, 0);
+    }
+
+    void solveTridiagonal(std::vector<Real> const &a,
+                          std::vector<Real> const &b,
+                          std::vector<Real> const &c,
+                          std::vector<Real> const &rhs,
+                          std::vector<Real> &x)
+    {
+        int const n = static_cast<int>(rhs.size());
+        AMREX_ALWAYS_ASSERT(n >= 2);
+        AMREX_ALWAYS_ASSERT(a.size() == rhs.size());
+        AMREX_ALWAYS_ASSERT(b.size() == rhs.size());
+        AMREX_ALWAYS_ASSERT(c.size() == rhs.size());
+
+        std::vector<Real> cprime(n, 0.0_rt);
+        std::vector<Real> dprime(rhs);
+
+        Real denom = b[0];
+        AMREX_ALWAYS_ASSERT(std::abs(denom) > 0.0_rt);
+        cprime[0] = c[0] / denom;
+        dprime[0] /= denom;
+
+        for (int i = 1; i < n; ++i)
+        {
+            denom = b[i] - a[i] * cprime[i - 1];
+            AMREX_ALWAYS_ASSERT(std::abs(denom) > 0.0_rt);
+            cprime[i] = (i < n - 1) ? c[i] / denom : 0.0_rt;
+            dprime[i] = (dprime[i] - a[i] * dprime[i - 1]) / denom;
+        }
+
+        x.resize(n);
+        x[n - 1] = dprime[n - 1];
+        for (int i = n - 2; i >= 0; --i)
+        {
+            x[i] = dprime[i] - cprime[i] * x[i + 1];
+        }
+    }
+
+    void solveCyclicTridiagonal(std::vector<Real> const &a,
+                                std::vector<Real> const &b,
+                                std::vector<Real> const &c,
+                                Real alpha,
+                                Real beta,
+                                std::vector<Real> const &rhs,
+                                std::vector<Real> &x)
+    {
+        int const n = static_cast<int>(rhs.size());
+        AMREX_ALWAYS_ASSERT(n > 2);
+
+        std::vector<Real> bb(b);
+        Real const gamma = -b[0];
+        AMREX_ALWAYS_ASSERT(std::abs(gamma) > 0.0_rt);
+
+        bb[0] -= gamma;
+        bb[n - 1] -= alpha * beta / gamma;
+
+        std::vector<Real> u(n, 0.0_rt);
+        u[0] = gamma;
+        u[n - 1] = alpha;
+
+        std::vector<Real> z;
+        solveTridiagonal(a, bb, c, rhs, x);
+        solveTridiagonal(a, bb, c, u, z);
+
+        Real const denom = 1.0_rt + z[0] + beta * z[n - 1] / gamma;
+        AMREX_ALWAYS_ASSERT(std::abs(denom) > 0.0_rt);
+        Real const fact = (x[0] + beta * x[n - 1] / gamma) / denom;
+
+        for (int i = 0; i < n; ++i)
+        {
+            x[i] -= fact * z[i];
+        }
+    }
+
+    void solvePeriodicNodalLines(MultiFab &field,
+                                 MultiFab const &rhs,
+                                 int solve_dir,
+                                 Real diag,
+                                 std::string const &solver_name)
+    {
+        Box const domain = field.boxArray().minimalBox();
+        int const lo = domain.smallEnd(solve_dir);
+        int const hi = domain.bigEnd(solve_dir);
+        int const nsolve = hi - lo; // Nodal endpoint at hi duplicates the periodic node at lo.
+
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(
+            nsolve > 2,
+            (solver_name + " requires at least three unique points along the implicit direction")
+                .c_str());
+
+        std::vector<Real> a(nsolve, -1.0_rt);
+        std::vector<Real> b(nsolve, diag);
+        std::vector<Real> c(nsolve, -1.0_rt);
+        a[0] = 0.0_rt;
+        c[nsolve - 1] = 0.0_rt;
+
+        BoxArray full_ba(domain);
+        DistributionMapping full_dm(full_ba);
+        MultiFab field_full(full_ba, full_dm, 1, 0);
+        field_full.ParallelCopy(rhs, 0, 0, 1);
+
+        for (MFIter mfi(field_full); mfi.isValid(); ++mfi)
+        {
+            Box const &bx = mfi.validbox();
+            amrex::ignore_unused(solver_name);
+            auto const &field_arr = field_full.array(mfi);
+
+            std::vector<Real> line_rhs(nsolve);
+            std::vector<Real> line_sol;
+
+            if (solve_dir == 0)
+            {
+                for (int k = bx.smallEnd(2); k <= bx.bigEnd(2); ++k)
+                {
+                    for (int j = bx.smallEnd(1); j <= bx.bigEnd(1); ++j)
+                    {
+                        for (int i = 0; i < nsolve; ++i)
+                        {
+                            line_rhs[i] = field_arr(lo + i, j, k);
+                        }
+
+                        solveCyclicTridiagonal(a, b, c, -1.0_rt, -1.0_rt, line_rhs, line_sol);
+
+                        for (int i = 0; i < nsolve; ++i)
+                        {
+                            field_arr(lo + i, j, k) = line_sol[i];
+                        }
+                        field_arr(hi, j, k) = line_sol[0];
+                    }
+                }
+            }
+            else if (solve_dir == 1)
+            {
+                for (int k = bx.smallEnd(2); k <= bx.bigEnd(2); ++k)
+                {
+                    for (int i = bx.smallEnd(0); i <= bx.bigEnd(0); ++i)
+                    {
+                        for (int j = 0; j < nsolve; ++j)
+                        {
+                            line_rhs[j] = field_arr(i, lo + j, k);
+                        }
+
+                        solveCyclicTridiagonal(a, b, c, -1.0_rt, -1.0_rt, line_rhs, line_sol);
+
+                        for (int j = 0; j < nsolve; ++j)
+                        {
+                            field_arr(i, lo + j, k) = line_sol[j];
+                        }
+                        field_arr(i, hi, k) = line_sol[0];
+                    }
+                }
+            }
+            else
+            {
+                AMREX_ALWAYS_ASSERT(solve_dir == 2);
+                for (int j = bx.smallEnd(1); j <= bx.bigEnd(1); ++j)
+                {
+                    for (int i = bx.smallEnd(0); i <= bx.bigEnd(0); ++i)
+                    {
+                        for (int k = 0; k < nsolve; ++k)
+                        {
+                            line_rhs[k] = field_arr(i, j, lo + k);
+                        }
+
+                        solveCyclicTridiagonal(a, b, c, -1.0_rt, -1.0_rt, line_rhs, line_sol);
+
+                        for (int k = 0; k < nsolve; ++k)
+                        {
+                            field_arr(i, j, lo + k) = line_sol[k];
+                        }
+                        field_arr(i, j, hi) = line_sol[0];
+                    }
+                }
+            }
+        }
+
+        field.ParallelCopy(field_full, 0, 0, 1);
     }
 } // namespace
 
@@ -126,12 +304,11 @@ void ADI::adiFirstHalfStep(Real dt)
     amrex::FillBoundary(bfields, period);
 
     MultiFab rhs_ex = buildRhsEx1(dt);
-    solveImplicitEx1(m_efields[0], rhs_ex, dt);
-
     MultiFab rhs_ey = buildRhsEy1(dt);
-    solveImplicitEy1(m_efields[1], rhs_ey, dt);
-
     MultiFab rhs_ez = buildRhsEz1(dt);
+
+    solveImplicitEx1(m_efields[0], rhs_ex, dt);
+    solveImplicitEy1(m_efields[1], rhs_ey, dt);
     solveImplicitEz1(m_efields[2], rhs_ez, dt);
 
     amrex::FillBoundary(efields, period);
@@ -154,12 +331,11 @@ void ADI::adiSecondHalfStep(Real dt)
     amrex::FillBoundary(bfields, period);
 
     MultiFab rhs_ex = buildRhsEx2(dt);
-    solveImplicitEx2(m_efields[0], rhs_ex, dt);
-
     MultiFab rhs_ey = buildRhsEy2(dt);
-    solveImplicitEy2(m_efields[1], rhs_ey, dt);
-
     MultiFab rhs_ez = buildRhsEz2(dt);
+
+    solveImplicitEx2(m_efields[0], rhs_ex, dt);
+    solveImplicitEy2(m_efields[1], rhs_ey, dt);
     solveImplicitEz2(m_efields[2], rhs_ez, dt);
 
     amrex::FillBoundary(efields, period);
@@ -299,17 +475,26 @@ MultiFab ADI::buildRhsEz1(Real dt) const
 
 void ADI::solveImplicitEx1(MultiFab &ex, MultiFab const &rhs, Real dt) const
 {
-    amrex::ignore_unused(ex, rhs, dt);
+    constexpr Real c = 2.99792458e8;
+    Real const dy = m_geom.CellSizeArray()[1];
+    Real const diag = 2.0_rt + 4.0_rt * dy * dy / (c * c * dt * dt);
+    solvePeriodicNodalLines(ex, rhs, 1, diag, "solveImplicitEx1");
 }
 
 void ADI::solveImplicitEy1(MultiFab &ey, MultiFab const &rhs, Real dt) const
 {
-    amrex::ignore_unused(ey, rhs, dt);
+    constexpr Real c = 2.99792458e8;
+    Real const dz = m_geom.CellSizeArray()[2];
+    Real const diag = 2.0_rt + 4.0_rt * dz * dz / (c * c * dt * dt);
+    solvePeriodicNodalLines(ey, rhs, 2, diag, "solveImplicitEy1");
 }
 
 void ADI::solveImplicitEz1(MultiFab &ez, MultiFab const &rhs, Real dt) const
 {
-    amrex::ignore_unused(ez, rhs, dt);
+    constexpr Real c = 2.99792458e8;
+    Real const dx = m_geom.CellSizeArray()[0];
+    Real const diag = 2.0_rt + 4.0_rt * dx * dx / (c * c * dt * dt);
+    solvePeriodicNodalLines(ez, rhs, 0, diag, "solveImplicitEz1");
 }
 
 void ADI::stepBx(Real dt)
@@ -495,15 +680,24 @@ MultiFab ADI::buildRhsEz2(Real dt) const
 
 void ADI::solveImplicitEx2(MultiFab &ex, MultiFab const &rhs, Real dt) const
 {
-    amrex::ignore_unused(ex, rhs, dt);
+    constexpr Real c = 2.99792458e8;
+    Real const dz = m_geom.CellSizeArray()[2];
+    Real const diag = 2.0_rt + 4.0_rt * dz * dz / (c * c * dt * dt);
+    solvePeriodicNodalLines(ex, rhs, 2, diag, "solveImplicitEx2");
 }
 
 void ADI::solveImplicitEy2(MultiFab &ey, MultiFab const &rhs, Real dt) const
 {
-    amrex::ignore_unused(ey, rhs, dt);
+    constexpr Real c = 2.99792458e8;
+    Real const dx = m_geom.CellSizeArray()[0];
+    Real const diag = 2.0_rt + 4.0_rt * dx * dx / (c * c * dt * dt);
+    solvePeriodicNodalLines(ey, rhs, 0, diag, "solveImplicitEy2");
 }
 
 void ADI::solveImplicitEz2(MultiFab &ez, MultiFab const &rhs, Real dt) const
 {
-    amrex::ignore_unused(ez, rhs, dt);
+    constexpr Real c = 2.99792458e8;
+    Real const dy = m_geom.CellSizeArray()[1];
+    Real const diag = 2.0_rt + 4.0_rt * dy * dy / (c * c * dt * dt);
+    solvePeriodicNodalLines(ez, rhs, 1, diag, "solveImplicitEz2");
 }

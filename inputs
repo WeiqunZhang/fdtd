@@ -5,7 +5,7 @@ adi.prob_hi = 1.0 1.0 1.0  # upper-right corner
 
 adi.max_step = 100
 adi.plot_int = 1           # write output every N steps (0 = off)
-adi.plot_format = visit    # numpy (.bin + .json) or visit (AMReX plotfiles for VisIt)
+adi.plot_format = numpy    # numpy (.bin + .json) or visit (AMReX plotfiles for VisIt)
 adi.output_dir = plt # numpy: directory; visit: plotfile prefix (e.g. plt -> plt00000)
 adi.cfl = 0.8              # fraction of 3D Yee CFL limit (not c*dt/dx; see notes/adi.tex)
 
