@@ -1,13 +1,13 @@
-#include "fdtd.H"
+#include "adi.H"
 #include <AMReX.H>
 
 int main(int argc, char *argv[])
 {
     amrex::Initialize(argc, argv);
     {
-        FDTD fdtd;
-        fdtd.initData();
-        fdtd.evolve();
+        ADI adi;
+        adi.initData();
+        adi.evolve();
     }
     amrex::Finalize();
 }
