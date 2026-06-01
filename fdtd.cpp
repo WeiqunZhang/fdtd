@@ -29,10 +29,14 @@ FDTD::FDTD()
     }
 
     pp.query("ic", m_ic);
-    pp.query("sinwave_amplitude", m_sinwave_amplitude);
-    pp.query("sinwave_dir", m_sinwave_dir);
-    pp.query("sinwave_pol", m_sinwave_pol);
-    pp.query("sinwave_wavelength", m_sinwave_wavelength);
+    pp.query("ic_amplitude", m_ic_amplitude);
+    pp.query("ic_dir", m_ic_dir);
+    pp.query("ic_pol", m_ic_pol);
+    pp.query("ic_wavelength", m_ic_wavelength);
+
+    m_pulse_center = 0.5_rt * (prob_lo[m_ic_dir] + prob_hi[m_ic_dir]);
+    pp.query("pulse_center", m_pulse_center);
+    pp.query("pulse_sigma", m_pulse_sigma);
 
     Box domain(IntVect(0), m_n_cells - 1);
     RealBox real_box(prob_lo.begin(), prob_hi.begin());
@@ -60,8 +64,8 @@ FDTD::FDTD()
 
 void FDTD::initData()
 {
-    InitSetupFields("fdtd", m_ic, m_sinwave_amplitude, m_sinwave_dir,
-                    m_sinwave_pol, m_sinwave_wavelength,
+    InitSetupFields("fdtd", m_ic, m_ic_amplitude, m_ic_dir,
+                    m_ic_pol, m_ic_wavelength, m_pulse_center, m_pulse_sigma,
                     m_geom, m_efields, m_bfields);
 }
 
@@ -69,10 +73,15 @@ void FDTD::evolve()
 {
     constexpr Real c = 2.99792458e8;
 
-    auto dx = m_geom.CellSizeArray();
-    Real dt = std::min({dx[0], dx[1], dx[2]}) / c * m_cfl;
-    Real c2dt = c * c * dt;
     auto dxinv = m_geom.InvCellSizeArray();
+    // 3D Yee CFL: dt <= cfl / (c * sqrt(sum_i 1/dx_i^2))  (see notes/adi.tex)
+    Real inv_dx2_sum = 0.0_rt;
+    for (int idim = 0; idim < AMREX_SPACEDIM; ++idim)
+    {
+        inv_dx2_sum += dxinv[idim] * dxinv[idim];
+    }
+    Real dt = m_cfl / (c * std::sqrt(inv_dx2_sum));
+    Real c2dt = c * c * dt;
 
     auto const period = m_geom.periodicity();
     Vector<MultiFab *> efields{AMREX_D_DECL(&m_efields[0], &m_efields[1], &m_efields[2])};

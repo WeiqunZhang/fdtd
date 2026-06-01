@@ -5,15 +5,27 @@ fdtd.prob_hi = 1.0 1.0 1.0  # upper-right corner
 
 fdtd.max_step = 100
 fdtd.plot_int = 1           # write output every N steps (0 = off)
-fdtd.plot_format = visit    # numpy (.bin + .json) or visit (AMReX plotfiles for VisIt)
+fdtd.plot_format = numpy    # numpy (.bin + .json) or visit (AMReX plotfiles for VisIt)
 fdtd.output_dir = plt # numpy: directory; visit: plotfile prefix (e.g. plt -> plt00000)
-fdtd.cfl = 0.8
+fdtd.cfl = 0.8              # fraction of 3D Yee CFL limit (not c*dt/dx; see notes/adi.tex)
 
 # Initial condition options:
 #   sinwave        : traveling sinusoidal plane wave
 #   standingwave   : standing wave seeded with E(x) and B=0 at t=0
-fdtd.ic = sinwave
-fdtd.sinwave_amplitude = 0.01
-fdtd.sinwave_dir = 2          # 0=+x, 1=+y, 2=+z
-fdtd.sinwave_pol = 0          # 0=Ex, 1=Ey, 2=Ez (must differ from dir)
-fdtd.sinwave_wavelength = -1  # <0: one wavelength along propagation dir (domain length)
+#   gaussianpulse  : Gaussian-modulated plane wave along ic_dir (carrier: ic_wavelength)
+# fdtd.ic = sinwave
+
+# Shared by sinwave, standingwave, and gaussianpulse:
+fdtd.ic_amplitude = 0.01    # E_0
+fdtd.ic_dir = 2               # propagation: 0=+x, 1=+y, 2=+z
+fdtd.ic_pol = 0               # E component: 0=Ex, 1=Ey, 2=Ez (must differ from ic_dir)
+fdtd.ic_wavelength = -1       # carrier wavelength along ic_dir (<0 => domain length)
+
+# Gaussian-modulated plane wave (ic = gaussianpulse):
+#   E_pol = E_0 exp(-(xi-x0)^2/(2 sigma^2)) cos(k0*(xi-x0)),  B = (1/c) k_hat x E
+#   xi is coordinate along ic_dir; pulse_center is xi_0
+fdtd.ic = gaussianpulse
+fdtd.ic_dir = 2
+fdtd.ic_pol = 0
+fdtd.pulse_center = 0.75           # envelope peak xi_0 along ic_dir
+fdtd.pulse_sigma = 0.05           # envelope sigma; <0 => 0.1 * domain length along ic_dir
