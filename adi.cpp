@@ -127,71 +127,71 @@ namespace
             amrex::ignore_unused(solver_name);
             auto const &field_arr = field_full.array(mfi);
 
-            std::vector<Real> line_rhs(nsolve);
-            std::vector<Real> line_sol;
-
             if (solve_dir == 0)
             {
-                for (int k = bx.smallEnd(2); k <= bx.bigEnd(2); ++k)
+                auto const b2d = amrex::makeSlab(bx, 0, lo);
+                amrex::ParallelForOMP(b2d, [=, &a, &b, &c](int, int j, int k)
                 {
-                    for (int j = bx.smallEnd(1); j <= bx.bigEnd(1); ++j)
+                    std::vector<Real> line_rhs(nsolve);
+                    std::vector<Real> line_sol;
+
+                    for (int i = 0; i < nsolve; ++i)
                     {
-                        for (int i = 0; i < nsolve; ++i)
-                        {
-                            line_rhs[i] = field_arr(lo + i, j, k);
-                        }
-
-                        solveCyclicTridiagonal(a, b, c, -1.0_rt, -1.0_rt, line_rhs, line_sol);
-
-                        for (int i = 0; i < nsolve; ++i)
-                        {
-                            field_arr(lo + i, j, k) = line_sol[i];
-                        }
-                        field_arr(hi, j, k) = line_sol[0];
+                        line_rhs[i] = field_arr(lo + i, j, k);
                     }
-                }
+
+                    solveCyclicTridiagonal(a, b, c, -1.0_rt, -1.0_rt, line_rhs, line_sol);
+
+                    for (int i = 0; i < nsolve; ++i)
+                    {
+                        field_arr(lo + i, j, k) = line_sol[i];
+                    }
+                    field_arr(hi, j, k) = line_sol[0];
+                });
             }
             else if (solve_dir == 1)
             {
-                for (int k = bx.smallEnd(2); k <= bx.bigEnd(2); ++k)
+                auto const b2d = amrex::makeSlab(bx, 1, lo);
+                amrex::ParallelForOMP(b2d, [=, &a, &b, &c](int i, int, int k)
                 {
-                    for (int i = bx.smallEnd(0); i <= bx.bigEnd(0); ++i)
+                    std::vector<Real> line_rhs(nsolve);
+                    std::vector<Real> line_sol;
+
+                    for (int j = 0; j < nsolve; ++j)
                     {
-                        for (int j = 0; j < nsolve; ++j)
-                        {
-                            line_rhs[j] = field_arr(i, lo + j, k);
-                        }
-
-                        solveCyclicTridiagonal(a, b, c, -1.0_rt, -1.0_rt, line_rhs, line_sol);
-
-                        for (int j = 0; j < nsolve; ++j)
-                        {
-                            field_arr(i, lo + j, k) = line_sol[j];
-                        }
-                        field_arr(i, hi, k) = line_sol[0];
+                        line_rhs[j] = field_arr(i, lo + j, k);
                     }
-                }
+
+                    solveCyclicTridiagonal(a, b, c, -1.0_rt, -1.0_rt, line_rhs, line_sol);
+
+                    for (int j = 0; j < nsolve; ++j)
+                    {
+                        field_arr(i, lo + j, k) = line_sol[j];
+                    }
+                    field_arr(i, hi, k) = line_sol[0];
+                });
             }
             else if (solve_dir == 2)
             {
-                for (int j = bx.smallEnd(1); j <= bx.bigEnd(1); ++j)
+                auto const b2d = amrex::makeSlab(bx, 2, lo);
+                amrex::ParallelForOMP(b2d, [=, &a, &b, &c](int i, int j, int)
                 {
-                    for (int i = bx.smallEnd(0); i <= bx.bigEnd(0); ++i)
+                    std::vector<Real> line_rhs(nsolve);
+                    std::vector<Real> line_sol;
+
+                    for (int k = 0; k < nsolve; ++k)
                     {
-                        for (int k = 0; k < nsolve; ++k)
-                        {
-                            line_rhs[k] = field_arr(i, j, lo + k);
-                        }
-
-                        solveCyclicTridiagonal(a, b, c, -1.0_rt, -1.0_rt, line_rhs, line_sol);
-
-                        for (int k = 0; k < nsolve; ++k)
-                        {
-                            field_arr(i, j, lo + k) = line_sol[k];
-                        }
-                        field_arr(i, j, hi) = line_sol[0];
+                        line_rhs[k] = field_arr(i, j, lo + k);
                     }
-                }
+
+                    solveCyclicTridiagonal(a, b, c, -1.0_rt, -1.0_rt, line_rhs, line_sol);
+
+                    for (int k = 0; k < nsolve; ++k)
+                    {
+                        field_arr(i, j, lo + k) = line_sol[k];
+                    }
+                    field_arr(i, j, hi) = line_sol[0];
+                });
             }
             else
             {
