@@ -1,5 +1,5 @@
 # Build outputs
-/main3d.gnu.ex
+/*.ex
 /tmp_build_dir/
 
 # AMReX runtime/output artifacts
