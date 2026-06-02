@@ -450,32 +450,32 @@ In the AMReX Yee grid, with vacuum media, the field updates are implemented as
 \begin{subequations}\label{eq:adi-first-half-amrex}
     \begin{align}
         \begin{split}
-            - E_x(i, j - 1, k) + \left(2+\frac{4\Delta y^2}{c^2\Delta t^2}\right) E_x(i, j, k) & - E_x(i, j + 1, k) = \frac{4\Delta y^2}{c^2\Delta t^2} E_x(i, j, k)                                                                        \\
-                                                                                               & + \frac{2\Delta y^2}{\Delta t}\left[\frac{B_z(i, j, k)-B_z(i, j - 1, k)}{\Delta y} - \frac{B_y(i, j, k)-B_y(i, j, k - 1)}{\Delta z}\right] \\
-                                                                                               & + \Delta y\left[\frac{E_y(i + 1, j - 1, k)-E_y(i, j - 1, k)}{\Delta x} - \frac{E_y(i + 1, j, k)-E_y(i, j, k)}{\Delta x}\right],            \\
+            - E_x^{n+\frac12}(i, j - 1, k) + \left(2+\frac{4\Delta y^2}{c^2\Delta t^2}\right) E_x^{n+\frac12}(i, j, k) & - E_x^{n+\frac12}(i, j + 1, k) = \frac{4\Delta y^2}{c^2\Delta t^2} E_x^{n}(i, j, k)                                                                        \\
+                                                                                                                       & + \frac{2\Delta y^2}{\Delta t}\left[\frac{B_z^{n}(i, j, k)-B_z^{n}(i, j - 1, k)}{\Delta y} - \frac{B_y^{n}(i, j, k)-B_y^{n}(i, j, k - 1)}{\Delta z}\right] \\
+                                                                                                                       & + \Delta y\left[\frac{E_y^{n}(i + 1, j - 1, k)-E_y^{n}(i, j - 1, k)}{\Delta x} - \frac{E_y^{n}(i + 1, j, k)-E_y^{n}(i, j, k)}{\Delta x}\right],            \\
         \end{split}
     \end{align}
     \begin{align}
         \begin{split}
-            - E_y(i, j, k - 1) + \left(2+\frac{4\Delta z^2}{c^2\Delta t^2}\right) E_y(i, j, k) & - E_y(i, j, k + 1) = \frac{4\Delta z^2}{c^2\Delta t^2} E_y(i, j, k)                                                                        \\
-                                                                                               & + \frac{2\Delta z^2}{\Delta t}\left[\frac{B_x(i, j, k)-B_x(i, j, k - 1)}{\Delta z} - \frac{B_z(i, j, k)-B_z(i - 1, j, k)}{\Delta x}\right] \\
-                                                                                               & + \Delta z\left[\frac{E_z(i, j + 1, k - 1)-E_z(i, j, k - 1)}{\Delta y} - \frac{E_z(i, j + 1, k)-E_z(i, j, k)}{\Delta y}\right],            \\
+            - E_y^{n+\frac12}(i, j, k - 1) + \left(2+\frac{4\Delta z^2}{c^2\Delta t^2}\right) E_y^{n+\frac12}(i, j, k) & - E_y^{n+\frac12}(i, j, k + 1) = \frac{4\Delta z^2}{c^2\Delta t^2} E_y^{n}(i, j, k)                                                                        \\
+                                                                                                                       & + \frac{2\Delta z^2}{\Delta t}\left[\frac{B_x^{n}(i, j, k)-B_x^{n}(i, j, k - 1)}{\Delta z} - \frac{B_z^{n}(i, j, k)-B_z^{n}(i - 1, j, k)}{\Delta x}\right] \\
+                                                                                                                       & + \Delta z\left[\frac{E_z^{n}(i, j + 1, k - 1)-E_z^{n}(i, j, k - 1)}{\Delta y} - \frac{E_z^{n}(i, j + 1, k)-E_z^{n}(i, j, k)}{\Delta y}\right],            \\
         \end{split}
     \end{align}
     \begin{align}
         \begin{split}
-            - E_z(i - 1, j, k) + \left(2+\frac{4\Delta x^2}{c^2\Delta t^2}\right) E_z(i, j, k) & - E_z(i + 1, j, k) = \frac{4\Delta x^2}{c^2\Delta t^2} E_z(i, j, k)                                                                        \\
-                                                                                               & + \frac{2\Delta x^2}{\Delta t}\left[\frac{B_y(i, j, k)-B_y(i - 1, j, k)}{\Delta x} - \frac{B_x(i, j, k)-B_x(i, j - 1, k)}{\Delta y}\right] \\
-                                                                                               & + \Delta x\left[\frac{E_x(i - 1, j, k + 1)-E_x(i - 1, j, k)}{\Delta z} - \frac{E_x(i, j, k + 1)-E_x(i, j, k)}{\Delta z}\right],            \\
+            - E_z^{n+\frac12}(i - 1, j, k) + \left(2+\frac{4\Delta x^2}{c^2\Delta t^2}\right) E_z^{n+\frac12}(i, j, k) & - E_z^{n+\frac12}(i + 1, j, k) = \frac{4\Delta x^2}{c^2\Delta t^2} E_z^{n}(i, j, k)                                                                        \\
+                                                                                                                       & + \frac{2\Delta x^2}{\Delta t}\left[\frac{B_y^{n}(i, j, k)-B_y^{n}(i - 1, j, k)}{\Delta x} - \frac{B_x^{n}(i, j, k)-B_x^{n}(i, j - 1, k)}{\Delta y}\right] \\
+                                                                                                                       & + \Delta x\left[\frac{E_x^{n}(i - 1, j, k + 1)-E_x^{n}(i - 1, j, k)}{\Delta z} - \frac{E_x^{n}(i, j, k + 1)-E_x^{n}(i, j, k)}{\Delta z}\right],            \\
         \end{split}
     \end{align}
     \begin{align}
-        B_x(i, j, k)
-         & = B_x(i, j, k) + \frac{\Delta t}{2}\left[\frac{E_y(i, j, k + 1)-E_y(i, j, k)}{\Delta z} - \frac{E_z(i, j + 1, k)-E_z(i, j, k)}{\Delta y}\right], \\
-        B_y(i, j, k)
-         & = B_y(i, j, k) + \frac{\Delta t}{2}\left[\frac{E_z(i + 1, j, k)-E_z(i, j, k)}{\Delta x} - \frac{E_x(i, j, k + 1)-E_x(i, j, k)}{\Delta z}\right], \\
-        B_z(i, j, k)
-         & = B_z(i, j, k) + \frac{\Delta t}{2}\left[\frac{E_x(i, j + 1, k)-E_x(i, j, k)}{\Delta y} - \frac{E_y(i + 1, j, k)-E_y(i, j, k)}{\Delta x}\right].
+        B_x^{n+\frac12}(i, j, k)
+         & = B_x^{n}(i, j, k) + \frac{\Delta t}{2}\left[\frac{E_y^{n+\frac12}(i, j, k + 1)-E_y^{n+\frac12}(i, j, k)}{\Delta z} - \frac{E_z^{n}(i, j + 1, k)-E_z^{n}(i, j, k)}{\Delta y}\right], \\
+        B_y^{n+\frac12}(i, j, k)
+         & = B_y^{n}(i, j, k) + \frac{\Delta t}{2}\left[\frac{E_z^{n+\frac12}(i + 1, j, k)-E_z^{n+\frac12}(i, j, k)}{\Delta x} - \frac{E_x^{n}(i, j, k + 1)-E_x^{n}(i, j, k)}{\Delta z}\right], \\
+        B_z^{n+\frac12}(i, j, k)
+         & = B_z^{n}(i, j, k) + \frac{\Delta t}{2}\left[\frac{E_x^{n+\frac12}(i, j + 1, k)-E_x^{n+\frac12}(i, j, k)}{\Delta y} - \frac{E_y^{n}(i + 1, j, k)-E_y^{n}(i, j, k)}{\Delta x}\right].
     \end{align}
 \end{subequations}
 
@@ -724,32 +724,32 @@ In the AMReX Yee grid, with vacuum media, the field updates are implemented as
 \begin{subequations}\label{eq:adi-second-half-amrex}
     \begin{align}
         \begin{split}
-            - E_x(i, j, k - 1) + \left(2+\frac{4\Delta z^2}{c^2\Delta t^2}\right) E_x(i, j, k) & - E_x(i, j, k + 1) = \frac{4\Delta z^2}{c^2\Delta t^2} E_x(i, j, k)                                                                        \\
-                                                                                                  & + \frac{2\Delta z^2}{\Delta t}\left[\frac{B_z(i, j, k)-B_z(i, j - 1, k)}{\Delta y} - \frac{B_y(i, j, k)-B_y(i, j, k - 1)}{\Delta z}\right] \\
-                                                                                                  & + \Delta z\left[\frac{E_z(i + 1, j, k - 1)-E_z(i, j, k - 1)}{\Delta x} - \frac{E_z(i + 1, j, k)-E_z(i, j, k)}{\Delta x}\right],            \\
+            - E_x^{n+1}(i, j, k - 1) + \left(2+\frac{4\Delta z^2}{c^2\Delta t^2}\right) E_x^{n+1}(i, j, k) & - E_x^{n+1}(i, j, k + 1) = \frac{4\Delta z^2}{c^2\Delta t^2} E_x^{n+\frac12}(i, j, k)                                                                        \\
+                                                                                                            & + \frac{2\Delta z^2}{\Delta t}\left[\frac{B_z^{n+\frac12}(i, j, k)-B_z^{n+\frac12}(i, j - 1, k)}{\Delta y} - \frac{B_y^{n+\frac12}(i, j, k)-B_y^{n+\frac12}(i, j, k - 1)}{\Delta z}\right] \\
+                                                                                                            & + \Delta z\left[\frac{E_z^{n+\frac12}(i + 1, j, k - 1)-E_z^{n+\frac12}(i, j, k - 1)}{\Delta x} - \frac{E_z^{n+\frac12}(i + 1, j, k)-E_z^{n+\frac12}(i, j, k)}{\Delta x}\right],            \\
         \end{split}
     \end{align}
     \begin{align}
         \begin{split}
-            - E_y(i - 1, j, k) + \left(2+\frac{4\Delta x^2}{c^2\Delta t^2}\right) E_y(i, j, k) & - E_y(i + 1, j, k) = \frac{4\Delta x^2}{c^2\Delta t^2} E_y(i, j, k)                                                                        \\
-                                                                                                  & + \frac{2\Delta x^2}{\Delta t}\left[\frac{B_x(i, j, k)-B_x(i, j, k - 1)}{\Delta z} - \frac{B_z(i, j, k)-B_z(i - 1, j, k)}{\Delta x}\right] \\
-                                                                                                  & + \Delta x\left[\frac{E_x(i - 1, j + 1, k)-E_x(i - 1, j, k)}{\Delta y} - \frac{E_x(i, j + 1, k)-E_x(i, j, k)}{\Delta y}\right],            \\
+            - E_y^{n+1}(i - 1, j, k) + \left(2+\frac{4\Delta x^2}{c^2\Delta t^2}\right) E_y^{n+1}(i, j, k) & - E_y^{n+1}(i + 1, j, k) = \frac{4\Delta x^2}{c^2\Delta t^2} E_y^{n+\frac12}(i, j, k)                                                                        \\
+                                                                                                            & + \frac{2\Delta x^2}{\Delta t}\left[\frac{B_x^{n+\frac12}(i, j, k)-B_x^{n+\frac12}(i, j, k - 1)}{\Delta z} - \frac{B_z^{n+\frac12}(i, j, k)-B_z^{n+\frac12}(i - 1, j, k)}{\Delta x}\right] \\
+                                                                                                            & + \Delta x\left[\frac{E_x^{n+\frac12}(i - 1, j + 1, k)-E_x^{n+\frac12}(i - 1, j, k)}{\Delta y} - \frac{E_x^{n+\frac12}(i, j + 1, k)-E_x^{n+\frac12}(i, j, k)}{\Delta y}\right],            \\
         \end{split}
     \end{align}
     \begin{align}
         \begin{split}
-            - E_z(i, j - 1, k) + \left(2+\frac{4\Delta y^2}{c^2\Delta t^2}\right) E_z(i, j, k) & - E_z(i, j + 1, k) = \frac{4\Delta y^2}{c^2\Delta t^2} E_z(i, j, k)                                                                        \\
-                                                                                                  & + \frac{2\Delta y^2}{\Delta t}\left[\frac{B_y(i, j, k)-B_y(i - 1, j, k)}{\Delta x} - \frac{B_x(i, j, k)-B_x(i, j - 1, k)}{\Delta y}\right] \\
-                                                                                                  & + \Delta y\left[\frac{E_y(i, j - 1, k + 1)-E_y(i, j - 1, k)}{\Delta z} - \frac{E_y(i, j, k + 1)-E_y(i, j, k)}{\Delta z}\right],            \\
+            - E_z^{n+1}(i, j - 1, k) + \left(2+\frac{4\Delta y^2}{c^2\Delta t^2}\right) E_z^{n+1}(i, j, k) & - E_z^{n+1}(i, j + 1, k) = \frac{4\Delta y^2}{c^2\Delta t^2} E_z^{n+\frac12}(i, j, k)                                                                        \\
+                                                                                                            & + \frac{2\Delta y^2}{\Delta t}\left[\frac{B_y^{n+\frac12}(i, j, k)-B_y^{n+\frac12}(i - 1, j, k)}{\Delta x} - \frac{B_x^{n+\frac12}(i, j, k)-B_x^{n+\frac12}(i, j - 1, k)}{\Delta y}\right] \\
+                                                                                                            & + \Delta y\left[\frac{E_y^{n+\frac12}(i, j - 1, k + 1)-E_y^{n+\frac12}(i, j - 1, k)}{\Delta z} - \frac{E_y^{n+\frac12}(i, j, k + 1)-E_y^{n+\frac12}(i, j, k)}{\Delta z}\right],            \\
         \end{split}
     \end{align}
     \begin{align}
-        B_x(i, j, k)
-         & = B_x(i, j, k) + \frac{\Delta t}{2}\left[\frac{E_y(i, j, k + 1)-E_y(i, j, k)}{\Delta z} - \frac{E_z(i, j + 1, k)-E_z(i, j, k)}{\Delta y}\right], \\
-        B_y(i, j, k)
-         & = B_y(i, j, k) + \frac{\Delta t}{2}\left[\frac{E_z(i + 1, j, k)-E_z(i, j, k)}{\Delta x} - \frac{E_x(i, j, k + 1)-E_x(i, j, k)}{\Delta z}\right], \\
-        B_z(i, j, k)
-         & = B_z(i, j, k) + \frac{\Delta t}{2}\left[\frac{E_x(i, j + 1, k)-E_x(i, j, k)}{\Delta y} - \frac{E_y(i + 1, j, k)-E_y(i, j, k)}{\Delta x}\right].
+        B_x^{n+1}(i, j, k)
+         & = B_x^{n+\frac12}(i, j, k) + \frac{\Delta t}{2}\left[\frac{E_y^{n+\frac12}(i, j, k + 1)-E_y^{n+\frac12}(i, j, k)}{\Delta z} - \frac{E_z^{n+1}(i, j + 1, k)-E_z^{n+1}(i, j, k)}{\Delta y}\right], \\
+        B_y^{n+1}(i, j, k)
+         & = B_y^{n+\frac12}(i, j, k) + \frac{\Delta t}{2}\left[\frac{E_z^{n+\frac12}(i + 1, j, k)-E_z^{n+\frac12}(i, j, k)}{\Delta x} - \frac{E_x^{n+1}(i, j, k + 1)-E_x^{n+1}(i, j, k)}{\Delta z}\right], \\
+        B_z^{n+1}(i, j, k)
+         & = B_z^{n+\frac12}(i, j, k) + \frac{\Delta t}{2}\left[\frac{E_x^{n+\frac12}(i, j + 1, k)-E_x^{n+\frac12}(i, j, k)}{\Delta y} - \frac{E_y^{n+1}(i + 1, j, k)-E_y^{n+1}(i, j, k)}{\Delta x}\right].
     \end{align}
 \end{subequations}
 
