@@ -1,0 +1,728 @@
+
+#include "adi.H"
+#include "init.H"
+#include "util.H"
+
+#include <AMReX_MFIter.H>
+#include <AMReX_ParmParse.H>
+
+#include <cmath>
+#include <vector>
+
+using namespace amrex;
+
+namespace
+{
+    MultiFab makeRhsLike(MultiFab const &field)
+    {
+        return MultiFab(field.boxArray(), field.DistributionMap(), 1, 0);
+    }
+
+    Array<MultiFab, AMREX_SPACEDIM> copyFieldsWithGhosts(
+        Array<MultiFab, AMREX_SPACEDIM> const &fields)
+    {
+        Array<MultiFab, AMREX_SPACEDIM> copies;
+        for (int idim = 0; idim < AMREX_SPACEDIM; ++idim)
+        {
+            copies[idim].define(fields[idim].boxArray(), fields[idim].DistributionMap(),
+                                fields[idim].nComp(), fields[idim].nGrowVect());
+            MultiFab::Copy(copies[idim], fields[idim], 0, 0, fields[idim].nComp(),
+                           fields[idim].nGrowVect());
+        }
+        return copies;
+    }
+
+    void solveTridiagonal(std::vector<Real> const &a,
+                          std::vector<Real> const &b,
+                          std::vector<Real> const &c,
+                          std::vector<Real> const &rhs,
+                          std::vector<Real> &x)
+    {
+        int const n = static_cast<int>(rhs.size());
+        AMREX_ALWAYS_ASSERT(n >= 2);
+        AMREX_ALWAYS_ASSERT(a.size() == rhs.size());
+        AMREX_ALWAYS_ASSERT(b.size() == rhs.size());
+        AMREX_ALWAYS_ASSERT(c.size() == rhs.size());
+
+        std::vector<Real> cprime(n, 0.0_rt);
+        std::vector<Real> dprime(rhs);
+
+        Real denom = b[0];
+        AMREX_ALWAYS_ASSERT(std::abs(denom) > 0.0_rt);
+        cprime[0] = c[0] / denom;
+        dprime[0] /= denom;
+
+        for (int i = 1; i < n; ++i)
+        {
+            denom = b[i] - a[i] * cprime[i - 1];
+            AMREX_ALWAYS_ASSERT(std::abs(denom) > 0.0_rt);
+            cprime[i] = (i < n - 1) ? c[i] / denom : 0.0_rt;
+            dprime[i] = (dprime[i] - a[i] * dprime[i - 1]) / denom;
+        }
+
+        x.resize(n);
+        x[n - 1] = dprime[n - 1];
+        for (int i = n - 2; i >= 0; --i)
+        {
+            x[i] = dprime[i] - cprime[i] * x[i + 1];
+        }
+    }
+
+    void solveCyclicTridiagonal(std::vector<Real> const &a,
+                                std::vector<Real> const &b,
+                                std::vector<Real> const &c,
+                                Real alpha,
+                                Real beta,
+                                std::vector<Real> const &rhs,
+                                std::vector<Real> &x)
+    {
+        int const n = static_cast<int>(rhs.size());
+        AMREX_ALWAYS_ASSERT(n > 2);
+
+        std::vector<Real> bb(b);
+        Real const gamma = -b[0];
+        AMREX_ALWAYS_ASSERT(std::abs(gamma) > 0.0_rt);
+
+        bb[0] -= gamma;
+        bb[n - 1] -= alpha * beta / gamma;
+
+        std::vector<Real> u(n, 0.0_rt);
+        u[0] = gamma;
+        u[n - 1] = alpha;
+
+        std::vector<Real> z;
+        solveTridiagonal(a, bb, c, rhs, x);
+        solveTridiagonal(a, bb, c, u, z);
+
+        // Applying Shermann-Morrison formula
+        // To solve Ax = b
+        // Tx = b, Tz = u
+        // x -= zv'x / (1 + v'z)
+        Real const denom = 1.0_rt + z[0] + beta * z[n - 1] / gamma;
+        AMREX_ALWAYS_ASSERT(std::abs(denom) > 0.0_rt);
+        Real const fact = (x[0] + beta * x[n - 1] / gamma) / denom;
+
+        for (int i = 0; i < n; ++i)
+        {
+            x[i] -= fact * z[i];
+        }
+    }
+
+    void solvePeriodicNodalLines(MultiFab &field,
+                                 MultiFab const &rhs,
+                                 int solve_dir,
+                                 Real diag,
+                                 std::string const &solver_name)
+    {
+        Box const domain = field.boxArray().minimalBox();
+        int const lo = domain.smallEnd(solve_dir);
+        int const hi = domain.bigEnd(solve_dir);
+        int const nsolve = hi - lo; // Nodal endpoint at hi duplicates the periodic node at lo.
+
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(
+            nsolve > 2,
+            (solver_name + " requires at least three unique points along the implicit direction")
+                .c_str());
+
+        std::vector<Real> a(nsolve, -1.0_rt);
+        std::vector<Real> b(nsolve, diag);
+        std::vector<Real> c(nsolve, -1.0_rt);
+        a[0] = 0.0_rt;
+        c[nsolve - 1] = 0.0_rt;
+
+        BoxArray full_ba(domain);
+        DistributionMapping full_dm(full_ba);
+        MultiFab field_full(full_ba, full_dm, 1, 0);
+        field_full.ParallelCopy(rhs, 0, 0, 1);
+
+        for (MFIter mfi(field_full); mfi.isValid(); ++mfi)
+        {
+            Box const &bx = mfi.validbox();
+            amrex::ignore_unused(solver_name);
+            auto const &field_arr = field_full.array(mfi);
+
+            if (solve_dir == 0)
+            {
+                auto const b2d = amrex::makeSlab(bx, 0, lo);
+                amrex::ParallelForOMP(b2d, [=, &a, &b, &c](int, int j, int k)
+                {
+                    std::vector<Real> line_rhs(nsolve);
+                    std::vector<Real> line_sol;
+
+                    for (int i = 0; i < nsolve; ++i)
+                    {
+                        line_rhs[i] = field_arr(lo + i, j, k);
+                    }
+
+                    solveCyclicTridiagonal(a, b, c, -1.0_rt, -1.0_rt, line_rhs, line_sol);
+
+                    for (int i = 0; i < nsolve; ++i)
+                    {
+                        field_arr(lo + i, j, k) = line_sol[i];
+                    }
+                    field_arr(hi, j, k) = line_sol[0];
+                });
+            }
+            else if (solve_dir == 1)
+            {
+                auto const b2d = amrex::makeSlab(bx, 1, lo);
+                amrex::ParallelForOMP(b2d, [=, &a, &b, &c](int i, int, int k)
+                {
+                    std::vector<Real> line_rhs(nsolve);
+                    std::vector<Real> line_sol;
+
+                    for (int j = 0; j < nsolve; ++j)
+                    {
+                        line_rhs[j] = field_arr(i, lo + j, k);
+                    }
+
+                    solveCyclicTridiagonal(a, b, c, -1.0_rt, -1.0_rt, line_rhs, line_sol);
+
+                    for (int j = 0; j < nsolve; ++j)
+                    {
+                        field_arr(i, lo + j, k) = line_sol[j];
+                    }
+                    field_arr(i, hi, k) = line_sol[0];
+                });
+            }
+            else if (solve_dir == 2)
+            {
+                auto const b2d = amrex::makeSlab(bx, 2, lo);
+                amrex::ParallelForOMP(b2d, [=, &a, &b, &c](int i, int j, int)
+                {
+                    std::vector<Real> line_rhs(nsolve);
+                    std::vector<Real> line_sol;
+
+                    for (int k = 0; k < nsolve; ++k)
+                    {
+                        line_rhs[k] = field_arr(i, j, lo + k);
+                    }
+
+                    solveCyclicTridiagonal(a, b, c, -1.0_rt, -1.0_rt, line_rhs, line_sol);
+
+                    for (int k = 0; k < nsolve; ++k)
+                    {
+                        field_arr(i, j, lo + k) = line_sol[k];
+                    }
+                    field_arr(i, j, hi) = line_sol[0];
+                });
+            }
+            else
+            {
+                amrex::Abort("solve_dir must be 0, 1, or 2");
+            }
+        }
+
+        field.ParallelCopy(field_full, 0, 0, 1);
+    }
+} // namespace
+
+ADI::ADI()
+{
+    ParmParse pp("adi");
+    pp.getarr("n_cells", m_n_cells);
+    pp.query("max_grid_size", m_max_grid_size);
+
+    RealVect prob_lo, prob_hi;
+    pp.getarr("prob_lo", prob_lo);
+    pp.getarr("prob_hi", prob_hi);
+
+    pp.query("max_step", m_max_step);
+    pp.query("plot_int", m_plot_int);
+    pp.query("plot_format", m_plot_format);
+    pp.query("cfl", m_cfl);
+    pp.query("output_dir", m_output_dir);
+
+    if (m_plot_format != "numpy" && m_plot_format != "visit")
+    {
+        amrex::Abort("adi.plot_format must be \"numpy\" or \"visit\"");
+    }
+
+    pp.query("ic", m_ic);
+    pp.query("ic_amplitude", m_ic_amplitude);
+    pp.query("ic_dir", m_ic_dir);
+    pp.query("ic_pol", m_ic_pol);
+    pp.query("ic_wavelength", m_ic_wavelength);
+
+    m_pulse_center = 0.5_rt * (prob_lo[m_ic_dir] + prob_hi[m_ic_dir]);
+    pp.query("pulse_center", m_pulse_center);
+    pp.query("pulse_sigma", m_pulse_sigma);
+
+    Box domain(IntVect(0), m_n_cells - 1);
+    RealBox real_box(prob_lo.begin(), prob_hi.begin());
+    Array<int, AMREX_SPACEDIM> is_periodic{AMREX_D_DECL(1, 1, 1)};
+
+    m_geom.define(domain, real_box, CoordSys::cartesian, is_periodic);
+
+    m_grids.define(domain);
+    m_grids.maxSize(m_max_grid_size);
+
+    m_dmap.define(m_grids);
+
+    static_assert(AMREX_SPACEDIM == 3, "3D only");
+    for (int idim = 0; idim < AMREX_SPACEDIM; ++idim)
+    {
+        IntVect etyp(1); // nodal by default
+        etyp[idim] = 0;  // cell-centered in idim-direction
+        m_efields[idim].define(amrex::convert(m_grids, etyp), m_dmap,
+                               1, 1); // one component, one ghost
+        IntVect btyp(0);              // cell-centerd by default
+        btyp[idim] = 1;               // nodal in idim-direction
+        m_bfields[idim].define(amrex::convert(m_grids, btyp), m_dmap, 1, 1);
+    }
+}
+
+void ADI::initData()
+{
+    InitSetupFields("adi", m_ic, m_ic_amplitude, m_ic_dir,
+                    m_ic_pol, m_ic_wavelength, m_pulse_center, m_pulse_sigma,
+                    m_geom, m_efields, m_bfields);
+}
+
+void ADI::evolve()
+{
+    constexpr Real c = 2.99792458e8;
+
+    auto dxinv = m_geom.InvCellSizeArray();
+    Real inv_dx2_sum = 0.0_rt;
+    for (int idim = 0; idim < AMREX_SPACEDIM; ++idim)
+    {
+        inv_dx2_sum += dxinv[idim] * dxinv[idim];
+    }
+    Real dt = m_cfl / (c * std::sqrt(inv_dx2_sum));
+
+    Real time = 0.0_rt;
+
+    if (m_plot_int > 0)
+    {
+        UtilWritePlotOutput(m_plot_format, m_output_dir, 0, time,
+                            m_grids, m_dmap, m_geom, m_efields, m_bfields);
+    }
+
+    for (int step = 0; step < m_max_step; ++step)
+    {
+        adiFirstHalfStep(dt);
+        adiSecondHalfStep(dt);
+
+        time += dt;
+
+        if (m_plot_int > 0 && (step + 1) % m_plot_int == 0)
+        {
+            UtilWritePlotOutput(m_plot_format, m_output_dir, step + 1, time,
+                                m_grids, m_dmap, m_geom, m_efields, m_bfields);
+        }
+    }
+}
+
+void ADI::adiFirstHalfStep(Real dt)
+{
+    // eq:adi-first-half-amrex — implicit E along y,z,x; explicit B at n+1/2
+    auto const period = m_geom.periodicity();
+    Vector<MultiFab *> efields{AMREX_D_DECL(&m_efields[0], &m_efields[1], &m_efields[2])};
+    Vector<MultiFab *> bfields{AMREX_D_DECL(&m_bfields[0], &m_bfields[1], &m_bfields[2])};
+
+    amrex::FillBoundary(efields, period);
+    amrex::FillBoundary(bfields, period);
+
+    Array<MultiFab, AMREX_SPACEDIM> eold = copyFieldsWithGhosts(m_efields);
+
+    MultiFab rhs_ex = buildRhsEx1(dt);
+    MultiFab rhs_ey = buildRhsEy1(dt);
+    MultiFab rhs_ez = buildRhsEz1(dt);
+
+    solveImplicitEx1(m_efields[0], rhs_ex, dt);
+    solveImplicitEy1(m_efields[1], rhs_ey, dt);
+    solveImplicitEz1(m_efields[2], rhs_ez, dt);
+
+    amrex::FillBoundary(efields, period);
+
+    stepBx(m_efields[1], eold[2], dt);
+    stepBy(m_efields[2], eold[0], dt);
+    stepBz(m_efields[0], eold[1], dt);
+
+    amrex::FillBoundary(bfields, period);
+}
+
+void ADI::adiSecondHalfStep(Real dt)
+{
+    // eq:adi-second-half-amrex — implicit E along z,x,y; explicit B at n+1
+    auto const period = m_geom.periodicity();
+    Vector<MultiFab *> efields{AMREX_D_DECL(&m_efields[0], &m_efields[1], &m_efields[2])};
+    Vector<MultiFab *> bfields{AMREX_D_DECL(&m_bfields[0], &m_bfields[1], &m_bfields[2])};
+
+    amrex::FillBoundary(efields, period);
+    amrex::FillBoundary(bfields, period);
+
+    Array<MultiFab, AMREX_SPACEDIM> eold = copyFieldsWithGhosts(m_efields);
+
+    MultiFab rhs_ex = buildRhsEx2(dt);
+    MultiFab rhs_ey = buildRhsEy2(dt);
+    MultiFab rhs_ez = buildRhsEz2(dt);
+
+    solveImplicitEx2(m_efields[0], rhs_ex, dt);
+    solveImplicitEy2(m_efields[1], rhs_ey, dt);
+    solveImplicitEz2(m_efields[2], rhs_ez, dt);
+
+    amrex::FillBoundary(efields, period);
+
+    stepBx(eold[1], m_efields[2], dt);
+    stepBy(eold[2], m_efields[0], dt);
+    stepBz(eold[0], m_efields[1], dt);
+
+    amrex::FillBoundary(bfields, period);
+}
+
+MultiFab ADI::buildRhsEx1(Real dt) const
+{
+    // RHS of eq:adi-first-half-amrex Ex row (vacuum), for tridiagonal solve along y.
+    constexpr Real c = 2.99792458e8;
+
+    MultiFab rhs = makeRhsLike(m_efields[0]);
+
+    auto const dx = m_geom.CellSizeArray();
+    Real const dy = dx[1];
+    Real const dyinv = 1.0_rt / dy;
+    Real const dzinv = 1.0_rt / dx[2];
+    Real const dxinv = 1.0_rt / dx[0];
+
+    Real const coef_ex = 4.0_rt * dy * dy / (c * c * dt * dt);
+    Real const coef_b = 2.0_rt * dy * dy / dt;
+    Real const coef_ey = dy;
+
+#ifdef AMREX_USE_OMP
+#pragma omp parallel if (Gpu::notInLaunchRegion())
+#endif
+    for (MFIter mfi(rhs, TilingIfNotGPU()); mfi.isValid(); ++mfi)
+    {
+        const Box &tilebx = mfi.tilebox();
+        auto const &rhs_arr = rhs.array(mfi);
+        auto const &ex_arr = m_efields[0].const_array(mfi);
+        auto const &ey_arr = m_efields[1].const_array(mfi);
+        auto const &bz_arr = m_bfields[2].const_array(mfi);
+        auto const &by_arr = m_bfields[1].const_array(mfi);
+
+        ParallelFor(tilebx, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept
+                      {
+            Real const curl_b = dyinv * (bz_arr(i, j, k) - bz_arr(i, j - 1, k)) -
+                                dzinv * (by_arr(i, j, k) - by_arr(i, j, k - 1));
+            Real const dey_dx = dxinv * ((ey_arr(i + 1, j - 1, k) - ey_arr(i, j - 1, k)) -
+                                         (ey_arr(i + 1, j, k) - ey_arr(i, j, k)));
+            rhs_arr(i, j, k) = coef_ex * ex_arr(i, j, k) + coef_b * curl_b + coef_ey * dey_dx;
+        });
+    }
+
+    return rhs;
+}
+
+MultiFab ADI::buildRhsEy1(Real dt) const
+{
+    // RHS of eq:adi-first-half-amrex Ey row (vacuum), for tridiagonal solve along z.
+    constexpr Real c = 2.99792458e8;
+
+    MultiFab rhs = makeRhsLike(m_efields[1]);
+
+    auto const dx = m_geom.CellSizeArray();
+    Real const dz = dx[2];
+    Real const dzinv = 1.0_rt / dz;
+    Real const dxinv = 1.0_rt / dx[0];
+    Real const dyinv = 1.0_rt / dx[1];
+
+    Real const coef_ey = 4.0_rt * dz * dz / (c * c * dt * dt);
+    Real const coef_b = 2.0_rt * dz * dz / dt;
+    Real const coef_ez = dz;
+
+#ifdef AMREX_USE_OMP
+#pragma omp parallel if (Gpu::notInLaunchRegion())
+#endif
+    for (MFIter mfi(rhs, TilingIfNotGPU()); mfi.isValid(); ++mfi)
+    {
+        const Box &tilebx = mfi.tilebox();
+        auto const &rhs_arr = rhs.array(mfi);
+        auto const &ey_arr = m_efields[1].const_array(mfi);
+        auto const &ez_arr = m_efields[2].const_array(mfi);
+        auto const &bx_arr = m_bfields[0].const_array(mfi);
+        auto const &bz_arr = m_bfields[2].const_array(mfi);
+
+        ParallelFor(tilebx, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept
+                      {
+            Real const curl_b = dzinv * (bx_arr(i, j, k) - bx_arr(i, j, k - 1)) -
+                                dxinv * (bz_arr(i, j, k) - bz_arr(i - 1, j, k));
+            Real const dez_dy = dyinv * ((ez_arr(i, j + 1, k - 1) - ez_arr(i, j, k - 1)) -
+                                         (ez_arr(i, j + 1, k) - ez_arr(i, j, k)));
+            rhs_arr(i, j, k) = coef_ey * ey_arr(i, j, k) + coef_b * curl_b + coef_ez * dez_dy;
+        });
+    }
+
+    return rhs;
+}
+
+MultiFab ADI::buildRhsEz1(Real dt) const
+{
+    // RHS of eq:adi-first-half-amrex Ez row (vacuum), for tridiagonal solve along x.
+    constexpr Real c = 2.99792458e8;
+
+    MultiFab rhs = makeRhsLike(m_efields[2]);
+
+    auto const dx = m_geom.CellSizeArray();
+    Real const dx_cell = dx[0];
+    Real const dxinv = 1.0_rt / dx_cell;
+    Real const dyinv = 1.0_rt / dx[1];
+    Real const dzinv = 1.0_rt / dx[2];
+
+    Real const coef_ez = 4.0_rt * dx_cell * dx_cell / (c * c * dt * dt);
+    Real const coef_b = 2.0_rt * dx_cell * dx_cell / dt;
+    Real const coef_ex = dx_cell;
+
+#ifdef AMREX_USE_OMP
+#pragma omp parallel if (Gpu::notInLaunchRegion())
+#endif
+    for (MFIter mfi(rhs, TilingIfNotGPU()); mfi.isValid(); ++mfi)
+    {
+        const Box &tilebx = mfi.tilebox();
+        auto const &rhs_arr = rhs.array(mfi);
+        auto const &ez_arr = m_efields[2].const_array(mfi);
+        auto const &ex_arr = m_efields[0].const_array(mfi);
+        auto const &by_arr = m_bfields[1].const_array(mfi);
+        auto const &bx_arr = m_bfields[0].const_array(mfi);
+
+        ParallelFor(tilebx, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept
+                      {
+            Real const curl_b = dxinv * (by_arr(i, j, k) - by_arr(i - 1, j, k)) -
+                                dyinv * (bx_arr(i, j, k) - bx_arr(i, j - 1, k));
+            Real const dex_dz = dzinv * ((ex_arr(i - 1, j, k + 1) - ex_arr(i - 1, j, k)) -
+                                         (ex_arr(i, j, k + 1) - ex_arr(i, j, k)));
+            rhs_arr(i, j, k) = coef_ez * ez_arr(i, j, k) + coef_b * curl_b + coef_ex * dex_dz;
+        });
+    }
+
+    return rhs;
+}
+
+void ADI::solveImplicitEx1(MultiFab &ex, MultiFab const &rhs, Real dt) const
+{
+    constexpr Real c = 2.99792458e8;
+    Real const dy = m_geom.CellSizeArray()[1];
+    Real const diag = 2.0_rt + 4.0_rt * dy * dy / (c * c * dt * dt);
+    solvePeriodicNodalLines(ex, rhs, 1, diag, "solveImplicitEx1");
+}
+
+void ADI::solveImplicitEy1(MultiFab &ey, MultiFab const &rhs, Real dt) const
+{
+    constexpr Real c = 2.99792458e8;
+    Real const dz = m_geom.CellSizeArray()[2];
+    Real const diag = 2.0_rt + 4.0_rt * dz * dz / (c * c * dt * dt);
+    solvePeriodicNodalLines(ey, rhs, 2, diag, "solveImplicitEy1");
+}
+
+void ADI::solveImplicitEz1(MultiFab &ez, MultiFab const &rhs, Real dt) const
+{
+    constexpr Real c = 2.99792458e8;
+    Real const dx = m_geom.CellSizeArray()[0];
+    Real const diag = 2.0_rt + 4.0_rt * dx * dx / (c * c * dt * dt);
+    solvePeriodicNodalLines(ez, rhs, 0, diag, "solveImplicitEz1");
+}
+
+MultiFab ADI::buildRhsEx2(Real dt) const
+{
+    // RHS of eq:adi-second-half-amrex Ex row (vacuum), for tridiagonal solve along z.
+    constexpr Real c = 2.99792458e8;
+
+    MultiFab rhs = makeRhsLike(m_efields[0]);
+
+    auto const dx = m_geom.CellSizeArray();
+    Real const dz = dx[2];
+    Real const dyinv = 1.0_rt / dx[1];
+    Real const dzinv = 1.0_rt / dz;
+    Real const dxinv = 1.0_rt / dx[0];
+
+    Real const coef_ex = 4.0_rt * dz * dz / (c * c * dt * dt);
+    Real const coef_b = 2.0_rt * dz * dz / dt;
+    Real const coef_ez = dz;
+
+#ifdef AMREX_USE_OMP
+#pragma omp parallel if (Gpu::notInLaunchRegion())
+#endif
+    for (MFIter mfi(rhs, TilingIfNotGPU()); mfi.isValid(); ++mfi)
+    {
+        const Box &tilebx = mfi.tilebox();
+        auto const &rhs_arr = rhs.array(mfi);
+        auto const &ex_arr = m_efields[0].const_array(mfi);
+        auto const &ez_arr = m_efields[2].const_array(mfi);
+        auto const &bz_arr = m_bfields[2].const_array(mfi);
+        auto const &by_arr = m_bfields[1].const_array(mfi);
+
+        ParallelFor(tilebx, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept
+                      {
+            Real const curl_b = dyinv * (bz_arr(i, j, k) - bz_arr(i, j - 1, k)) -
+                                dzinv * (by_arr(i, j, k) - by_arr(i, j, k - 1));
+            Real const dez_dx = dxinv * ((ez_arr(i + 1, j, k - 1) - ez_arr(i, j, k - 1)) -
+                                         (ez_arr(i + 1, j, k) - ez_arr(i, j, k)));
+            rhs_arr(i, j, k) = coef_ex * ex_arr(i, j, k) + coef_b * curl_b + coef_ez * dez_dx;
+        });
+    }
+
+    return rhs;
+}
+
+MultiFab ADI::buildRhsEy2(Real dt) const
+{
+    // RHS of eq:adi-second-half-amrex Ey row (vacuum), for tridiagonal solve along x.
+    constexpr Real c = 2.99792458e8;
+
+    MultiFab rhs = makeRhsLike(m_efields[1]);
+
+    auto const dx = m_geom.CellSizeArray();
+    Real const dx_cell = dx[0];
+    Real const dzinv = 1.0_rt / dx[2];
+    Real const dxinv = 1.0_rt / dx_cell;
+    Real const dyinv = 1.0_rt / dx[1];
+
+    Real const coef_ey = 4.0_rt * dx_cell * dx_cell / (c * c * dt * dt);
+    Real const coef_b = 2.0_rt * dx_cell * dx_cell / dt;
+    Real const coef_ex = dx_cell;
+
+#ifdef AMREX_USE_OMP
+#pragma omp parallel if (Gpu::notInLaunchRegion())
+#endif
+    for (MFIter mfi(rhs, TilingIfNotGPU()); mfi.isValid(); ++mfi)
+    {
+        const Box &tilebx = mfi.tilebox();
+        auto const &rhs_arr = rhs.array(mfi);
+        auto const &ey_arr = m_efields[1].const_array(mfi);
+        auto const &ex_arr = m_efields[0].const_array(mfi);
+        auto const &bx_arr = m_bfields[0].const_array(mfi);
+        auto const &bz_arr = m_bfields[2].const_array(mfi);
+
+        ParallelFor(tilebx, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept
+                      {
+            Real const curl_b = dzinv * (bx_arr(i, j, k) - bx_arr(i, j, k - 1)) -
+                                dxinv * (bz_arr(i, j, k) - bz_arr(i - 1, j, k));
+            Real const dex_dy = dyinv * ((ex_arr(i - 1, j + 1, k) - ex_arr(i - 1, j, k)) -
+                                         (ex_arr(i, j + 1, k) - ex_arr(i, j, k)));
+            rhs_arr(i, j, k) = coef_ey * ey_arr(i, j, k) + coef_b * curl_b + coef_ex * dex_dy;
+        });
+    }
+
+    return rhs;
+}
+
+MultiFab ADI::buildRhsEz2(Real dt) const
+{
+    // RHS of eq:adi-second-half-amrex Ez row (vacuum), for tridiagonal solve along y.
+    constexpr Real c = 2.99792458e8;
+
+    MultiFab rhs = makeRhsLike(m_efields[2]);
+
+    auto const dx = m_geom.CellSizeArray();
+    Real const dy = dx[1];
+    Real const dxinv = 1.0_rt / dx[0];
+    Real const dyinv = 1.0_rt / dy;
+    Real const dzinv = 1.0_rt / dx[2];
+
+    Real const coef_ez = 4.0_rt * dy * dy / (c * c * dt * dt);
+    Real const coef_b = 2.0_rt * dy * dy / dt;
+    Real const coef_ey = dy;
+
+#ifdef AMREX_USE_OMP
+#pragma omp parallel if (Gpu::notInLaunchRegion())
+#endif
+    for (MFIter mfi(rhs, TilingIfNotGPU()); mfi.isValid(); ++mfi)
+    {
+        const Box &tilebx = mfi.tilebox();
+        auto const &rhs_arr = rhs.array(mfi);
+        auto const &ez_arr = m_efields[2].const_array(mfi);
+        auto const &ey_arr = m_efields[1].const_array(mfi);
+        auto const &by_arr = m_bfields[1].const_array(mfi);
+        auto const &bx_arr = m_bfields[0].const_array(mfi);
+
+        ParallelFor(tilebx, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept
+                      {
+            Real const curl_b = dxinv * (by_arr(i, j, k) - by_arr(i - 1, j, k)) -
+                                dyinv * (bx_arr(i, j, k) - bx_arr(i, j - 1, k));
+            Real const dey_dz = dzinv * ((ey_arr(i, j - 1, k + 1) - ey_arr(i, j - 1, k)) -
+                                         (ey_arr(i, j, k + 1) - ey_arr(i, j, k)));
+            rhs_arr(i, j, k) = coef_ez * ez_arr(i, j, k) + coef_b * curl_b + coef_ey * dey_dz;
+        });
+    }
+
+    return rhs;
+}
+
+void ADI::solveImplicitEx2(MultiFab &ex, MultiFab const &rhs, Real dt) const
+{
+    constexpr Real c = 2.99792458e8;
+    Real const dz = m_geom.CellSizeArray()[2];
+    Real const diag = 2.0_rt + 4.0_rt * dz * dz / (c * c * dt * dt);
+    solvePeriodicNodalLines(ex, rhs, 2, diag, "solveImplicitEx2");
+}
+
+void ADI::solveImplicitEy2(MultiFab &ey, MultiFab const &rhs, Real dt) const
+{
+    constexpr Real c = 2.99792458e8;
+    Real const dx = m_geom.CellSizeArray()[0];
+    Real const diag = 2.0_rt + 4.0_rt * dx * dx / (c * c * dt * dt);
+    solvePeriodicNodalLines(ey, rhs, 0, diag, "solveImplicitEy2");
+}
+
+void ADI::solveImplicitEz2(MultiFab &ez, MultiFab const &rhs, Real dt) const
+{
+    constexpr Real c = 2.99792458e8;
+    Real const dy = m_geom.CellSizeArray()[1];
+    Real const diag = 2.0_rt + 4.0_rt * dy * dy / (c * c * dt * dt);
+    solvePeriodicNodalLines(ez, rhs, 1, diag, "solveImplicitEz2");
+}
+
+void ADI::stepBx(MultiFab const &ey_src, MultiFab const &ez_src, Real dt)
+{
+    // B_x += (dt/2)(dEy/dz - dEz/dy), vacuum Yee stencil.
+    auto const dxinv = m_geom.InvCellSizeArray();
+    Real const halfdt = 0.5_rt * dt;
+
+    auto const &ey = ey_src.const_arrays();
+    auto const &ez = ez_src.const_arrays();
+    auto const &bx = m_bfields[0].arrays();
+
+    ParallelFor(m_bfields[0], [=] AMREX_GPU_DEVICE(int b, int i, int j, int k)
+                {
+        bx[b](i, j, k) +=
+            halfdt * (dxinv[2] * (ey[b](i, j, k + 1) - ey[b](i, j, k)) -
+                      dxinv[1] * (ez[b](i, j + 1, k) - ez[b](i, j, k)));
+    });
+    Gpu::streamSynchronize();
+}
+
+void ADI::stepBy(MultiFab const &ez_src, MultiFab const &ex_src, Real dt)
+{
+    auto const dxinv = m_geom.InvCellSizeArray();
+    Real const halfdt = 0.5_rt * dt;
+
+    auto const &ex = ex_src.const_arrays();
+    auto const &ez = ez_src.const_arrays();
+    auto const &by = m_bfields[1].arrays();
+
+    ParallelFor(m_bfields[1], [=] AMREX_GPU_DEVICE(int b, int i, int j, int k)
+                {
+        by[b](i, j, k) +=
+            halfdt * (dxinv[0] * (ez[b](i + 1, j, k) - ez[b](i, j, k)) -
+                      dxinv[2] * (ex[b](i, j, k + 1) - ex[b](i, j, k)));
+    });
+    Gpu::streamSynchronize();
+}
+
+void ADI::stepBz(MultiFab const &ex_src, MultiFab const &ey_src, Real dt)
+{
+    auto const dxinv = m_geom.InvCellSizeArray();
+    Real const halfdt = 0.5_rt * dt;
+
+    auto const &ex = ex_src.const_arrays();
+    auto const &ey = ey_src.const_arrays();
+    auto const &bz = m_bfields[2].arrays();
+
+    ParallelFor(m_bfields[2], [=] AMREX_GPU_DEVICE(int b, int i, int j, int k)
+                {
+        bz[b](i, j, k) +=
+            halfdt * (dxinv[1] * (ex[b](i, j + 1, k) - ex[b](i, j, k)) -
+                      dxinv[0] * (ey[b](i + 1, j, k) - ey[b](i, j, k)));
+    });
+    Gpu::streamSynchronize();
+}

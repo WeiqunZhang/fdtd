@@ -1,0 +1,19 @@
+# Build outputs
+/*.ex
+/tmp_build_dir/
+
+# AMReX runtime/output artifacts
+/plt*/
+*.visit
+/chk*/
+/Backtrace.*
+/core
+/core.*
+
+# Local editor/OS noise
+.DS_Store
+*.swp
+*.swo
+*~
+
+numpy_out/
