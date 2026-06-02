@@ -504,61 +504,6 @@ void ADI::solveImplicitEz1(MultiFab &ez, MultiFab const &rhs, Real dt) const
     solvePeriodicNodalLines(ez, rhs, 0, diag, "solveImplicitEz1");
 }
 
-void ADI::stepBx(Real dt)
-{
-    // B_x += (dt/2)(dEy/dz - dEz/dy), vacuum Yee stencil (adi.tex magnetic update).
-    auto const dxinv = m_geom.InvCellSizeArray();
-    Real const halfdt = 0.5_rt * dt;
-
-    auto const &ey = m_efields[1].arrays();
-    auto const &ez = m_efields[2].arrays();
-    auto const &bx = m_bfields[0].arrays();
-
-    ParallelFor(m_bfields[0], [=] AMREX_GPU_DEVICE(int b, int i, int j, int k)
-                {
-        bx[b](i, j, k) +=
-            halfdt * (dxinv[2] * (ey[b](i, j, k + 1) - ey[b](i, j, k)) -
-                      dxinv[1] * (ez[b](i, j + 1, k) - ez[b](i, j, k)));
-    });
-    Gpu::streamSynchronize();
-}
-
-void ADI::stepBy(Real dt)
-{
-    auto const dxinv = m_geom.InvCellSizeArray();
-    Real const halfdt = 0.5_rt * dt;
-
-    auto const &ex = m_efields[0].arrays();
-    auto const &ez = m_efields[2].arrays();
-    auto const &by = m_bfields[1].arrays();
-
-    ParallelFor(m_bfields[1], [=] AMREX_GPU_DEVICE(int b, int i, int j, int k)
-                {
-        by[b](i, j, k) +=
-            halfdt * (dxinv[0] * (ez[b](i + 1, j, k) - ez[b](i, j, k)) -
-                      dxinv[2] * (ex[b](i, j, k + 1) - ex[b](i, j, k)));
-    });
-    Gpu::streamSynchronize();
-}
-
-void ADI::stepBz(Real dt)
-{
-    auto const dxinv = m_geom.InvCellSizeArray();
-    Real const halfdt = 0.5_rt * dt;
-
-    auto const &ex = m_efields[0].arrays();
-    auto const &ey = m_efields[1].arrays();
-    auto const &bz = m_bfields[2].arrays();
-
-    ParallelFor(m_bfields[2], [=] AMREX_GPU_DEVICE(int b, int i, int j, int k)
-                {
-        bz[b](i, j, k) +=
-            halfdt * (dxinv[1] * (ex[b](i, j + 1, k) - ex[b](i, j, k)) -
-                      dxinv[0] * (ey[b](i + 1, j, k) - ey[b](i, j, k)));
-    });
-    Gpu::streamSynchronize();
-}
-
 MultiFab ADI::buildRhsEx2(Real dt) const
 {
     // RHS of eq:adi-second-half-amrex Ex row (vacuum), for tridiagonal solve along z.
@@ -707,4 +652,59 @@ void ADI::solveImplicitEz2(MultiFab &ez, MultiFab const &rhs, Real dt) const
     Real const dy = m_geom.CellSizeArray()[1];
     Real const diag = 2.0_rt + 4.0_rt * dy * dy / (c * c * dt * dt);
     solvePeriodicNodalLines(ez, rhs, 1, diag, "solveImplicitEz2");
+}
+
+void ADI::stepBx(Real dt)
+{
+    // B_x += (dt/2)(dEy/dz - dEz/dy), vacuum Yee stencil (adi.tex magnetic update).
+    auto const dxinv = m_geom.InvCellSizeArray();
+    Real const halfdt = 0.5_rt * dt;
+
+    auto const &ey = m_efields[1].arrays();
+    auto const &ez = m_efields[2].arrays();
+    auto const &bx = m_bfields[0].arrays();
+
+    ParallelFor(m_bfields[0], [=] AMREX_GPU_DEVICE(int b, int i, int j, int k)
+                {
+        bx[b](i, j, k) +=
+            halfdt * (dxinv[2] * (ey[b](i, j, k + 1) - ey[b](i, j, k)) -
+                      dxinv[1] * (ez[b](i, j + 1, k) - ez[b](i, j, k)));
+    });
+    Gpu::streamSynchronize();
+}
+
+void ADI::stepBy(Real dt)
+{
+    auto const dxinv = m_geom.InvCellSizeArray();
+    Real const halfdt = 0.5_rt * dt;
+
+    auto const &ex = m_efields[0].arrays();
+    auto const &ez = m_efields[2].arrays();
+    auto const &by = m_bfields[1].arrays();
+
+    ParallelFor(m_bfields[1], [=] AMREX_GPU_DEVICE(int b, int i, int j, int k)
+                {
+        by[b](i, j, k) +=
+            halfdt * (dxinv[0] * (ez[b](i + 1, j, k) - ez[b](i, j, k)) -
+                      dxinv[2] * (ex[b](i, j, k + 1) - ex[b](i, j, k)));
+    });
+    Gpu::streamSynchronize();
+}
+
+void ADI::stepBz(Real dt)
+{
+    auto const dxinv = m_geom.InvCellSizeArray();
+    Real const halfdt = 0.5_rt * dt;
+
+    auto const &ex = m_efields[0].arrays();
+    auto const &ey = m_efields[1].arrays();
+    auto const &bz = m_bfields[2].arrays();
+
+    ParallelFor(m_bfields[2], [=] AMREX_GPU_DEVICE(int b, int i, int j, int k)
+                {
+        bz[b](i, j, k) +=
+            halfdt * (dxinv[1] * (ex[b](i, j + 1, k) - ex[b](i, j, k)) -
+                      dxinv[0] * (ey[b](i + 1, j, k) - ey[b](i, j, k)));
+    });
+    Gpu::streamSynchronize();
 }
