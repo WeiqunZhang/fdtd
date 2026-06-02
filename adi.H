@@ -42,10 +42,13 @@ public:
                           amrex::Real dt) const;
 
 private:
-    // Explicit B += (dt/2) curl E (eq:adi-first/second-half-amrex magnetic rows)
-    void stepBx(amrex::Real dt);
-    void stepBy(amrex::Real dt);
-    void stepBz(amrex::Real dt);
+    // Explicit B += (dt/2) curl E with the old/new split used by the ADI half-step.
+    void stepBx(amrex::MultiFab const &ey_src, amrex::MultiFab const &ez_src,
+                amrex::Real dt);
+    void stepBy(amrex::MultiFab const &ez_src, amrex::MultiFab const &ex_src,
+                amrex::Real dt);
+    void stepBz(amrex::MultiFab const &ex_src, amrex::MultiFab const &ey_src,
+                amrex::Real dt);
 
     amrex::IntVect m_n_cells;
     int m_max_grid_size = 64;

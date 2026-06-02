@@ -18,6 +18,20 @@ namespace
         return MultiFab(field.boxArray(), field.DistributionMap(), 1, 0);
     }
 
+    Array<MultiFab, AMREX_SPACEDIM> copyFieldsWithGhosts(
+        Array<MultiFab, AMREX_SPACEDIM> const &fields)
+    {
+        Array<MultiFab, AMREX_SPACEDIM> copies;
+        for (int idim = 0; idim < AMREX_SPACEDIM; ++idim)
+        {
+            copies[idim].define(fields[idim].boxArray(), fields[idim].DistributionMap(),
+                                fields[idim].nComp(), fields[idim].nGrowVect());
+            MultiFab::Copy(copies[idim], fields[idim], 0, 0, fields[idim].nComp(),
+                           fields[idim].nGrowVect());
+        }
+        return copies;
+    }
+
     void solveTridiagonal(std::vector<Real> const &a,
                           std::vector<Real> const &b,
                           std::vector<Real> const &c,
@@ -310,6 +324,8 @@ void ADI::adiFirstHalfStep(Real dt)
     amrex::FillBoundary(efields, period);
     amrex::FillBoundary(bfields, period);
 
+    Array<MultiFab, AMREX_SPACEDIM> eold = copyFieldsWithGhosts(m_efields);
+
     MultiFab rhs_ex = buildRhsEx1(dt);
     MultiFab rhs_ey = buildRhsEy1(dt);
     MultiFab rhs_ez = buildRhsEz1(dt);
@@ -320,9 +336,9 @@ void ADI::adiFirstHalfStep(Real dt)
 
     amrex::FillBoundary(efields, period);
 
-    stepBx(dt);
-    stepBy(dt);
-    stepBz(dt);
+    stepBx(m_efields[1], eold[2], dt);
+    stepBy(m_efields[2], eold[0], dt);
+    stepBz(m_efields[0], eold[1], dt);
 
     amrex::FillBoundary(bfields, period);
 }
@@ -337,6 +353,8 @@ void ADI::adiSecondHalfStep(Real dt)
     amrex::FillBoundary(efields, period);
     amrex::FillBoundary(bfields, period);
 
+    Array<MultiFab, AMREX_SPACEDIM> eold = copyFieldsWithGhosts(m_efields);
+
     MultiFab rhs_ex = buildRhsEx2(dt);
     MultiFab rhs_ey = buildRhsEy2(dt);
     MultiFab rhs_ez = buildRhsEz2(dt);
@@ -347,9 +365,9 @@ void ADI::adiSecondHalfStep(Real dt)
 
     amrex::FillBoundary(efields, period);
 
-    stepBx(dt);
-    stepBy(dt);
-    stepBz(dt);
+    stepBx(eold[1], m_efields[2], dt);
+    stepBy(eold[2], m_efields[0], dt);
+    stepBz(eold[0], m_efields[1], dt);
 
     amrex::FillBoundary(bfields, period);
 }
@@ -654,14 +672,14 @@ void ADI::solveImplicitEz2(MultiFab &ez, MultiFab const &rhs, Real dt) const
     solvePeriodicNodalLines(ez, rhs, 1, diag, "solveImplicitEz2");
 }
 
-void ADI::stepBx(Real dt)
+void ADI::stepBx(MultiFab const &ey_src, MultiFab const &ez_src, Real dt)
 {
-    // B_x += (dt/2)(dEy/dz - dEz/dy), vacuum Yee stencil (adi.tex magnetic update).
+    // B_x += (dt/2)(dEy/dz - dEz/dy), vacuum Yee stencil.
     auto const dxinv = m_geom.InvCellSizeArray();
     Real const halfdt = 0.5_rt * dt;
 
-    auto const &ey = m_efields[1].arrays();
-    auto const &ez = m_efields[2].arrays();
+    auto const &ey = ey_src.const_arrays();
+    auto const &ez = ez_src.const_arrays();
     auto const &bx = m_bfields[0].arrays();
 
     ParallelFor(m_bfields[0], [=] AMREX_GPU_DEVICE(int b, int i, int j, int k)
@@ -673,13 +691,13 @@ void ADI::stepBx(Real dt)
     Gpu::streamSynchronize();
 }
 
-void ADI::stepBy(Real dt)
+void ADI::stepBy(MultiFab const &ez_src, MultiFab const &ex_src, Real dt)
 {
     auto const dxinv = m_geom.InvCellSizeArray();
     Real const halfdt = 0.5_rt * dt;
 
-    auto const &ex = m_efields[0].arrays();
-    auto const &ez = m_efields[2].arrays();
+    auto const &ex = ex_src.const_arrays();
+    auto const &ez = ez_src.const_arrays();
     auto const &by = m_bfields[1].arrays();
 
     ParallelFor(m_bfields[1], [=] AMREX_GPU_DEVICE(int b, int i, int j, int k)
@@ -691,13 +709,13 @@ void ADI::stepBy(Real dt)
     Gpu::streamSynchronize();
 }
 
-void ADI::stepBz(Real dt)
+void ADI::stepBz(MultiFab const &ex_src, MultiFab const &ey_src, Real dt)
 {
     auto const dxinv = m_geom.InvCellSizeArray();
     Real const halfdt = 0.5_rt * dt;
 
-    auto const &ex = m_efields[0].arrays();
-    auto const &ey = m_efields[1].arrays();
+    auto const &ex = ex_src.const_arrays();
+    auto const &ey = ey_src.const_arrays();
     auto const &bz = m_bfields[2].arrays();
 
     ParallelFor(m_bfields[2], [=] AMREX_GPU_DEVICE(int b, int i, int j, int k)
