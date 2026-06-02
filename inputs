@@ -7,7 +7,7 @@ adi.max_step = 100
 adi.plot_int = 1           # write output every N steps (0 = off)
 adi.plot_format = numpy    # numpy (.bin + .json) or visit (AMReX plotfiles for VisIt)
 adi.output_dir = plt # numpy: directory; visit: plotfile prefix (e.g. plt -> plt00000)
-adi.cfl = 0.8              # fraction of 3D Yee CFL limit (not c*dt/dx; see notes/adi.tex)
+adi.cfl = 2              # fraction of 3D Yee CFL limit (not c*dt/dx; see notes/adi.tex)
 
 # Initial condition options:
 #   sinwave        : traveling sinusoidal plane wave
@@ -24,7 +24,7 @@ adi.ic_wavelength = -1       # carrier wavelength along ic_dir (<0 => domain len
 # Gaussian-modulated plane wave (ic = gaussianpulse):
 #   E_pol = E_0 exp(-(xi-x0)^2/(2 sigma^2)) cos(k0*(xi-x0)),  B = (1/c) k_hat x E
 #   xi is coordinate along ic_dir; pulse_center is xi_0
-adi.ic = gaussianpulse
+adi.ic = sinwave
 adi.ic_dir = 2
 adi.ic_pol = 0
 adi.pulse_center = 0.75           # envelope peak xi_0 along ic_dir
