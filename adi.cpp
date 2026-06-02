@@ -80,6 +80,10 @@ namespace
         solveTridiagonal(a, bb, c, rhs, x);
         solveTridiagonal(a, bb, c, u, z);
 
+        // Applying Shermann-Morrison formula
+        // To solve Ax = b
+        // Tx = b, Tz = u
+        // x -= zv'x / (1 + v'z)
         Real const denom = 1.0_rt + z[0] + beta * z[n - 1] / gamma;
         AMREX_ALWAYS_ASSERT(std::abs(denom) > 0.0_rt);
         Real const fact = (x[0] + beta * x[n - 1] / gamma) / denom;
@@ -168,9 +172,8 @@ namespace
                     }
                 }
             }
-            else
+            else if (solve_dir == 2)
             {
-                AMREX_ALWAYS_ASSERT(solve_dir == 2);
                 for (int j = bx.smallEnd(1); j <= bx.bigEnd(1); ++j)
                 {
                     for (int i = bx.smallEnd(0); i <= bx.bigEnd(0); ++i)
@@ -189,6 +192,10 @@ namespace
                         field_arr(i, j, hi) = line_sol[0];
                     }
                 }
+            }
+            else
+            {
+                amrex::Abort("solve_dir must be 0, 1, or 2");
             }
         }
 
