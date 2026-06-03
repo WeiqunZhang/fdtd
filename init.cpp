@@ -10,27 +10,28 @@ namespace
 {
     constexpr Real c_light = 2.99792458e8;
 
-    // Return the physical coordinate in one direction for a field component that is
-    // staggered on a Yee grid: half-cell shifted along its own component direction.
+    // Return the physical coordinate in one direction for a Yee-grid field.
+    // Electric fields are cell-centered along their own component direction;
+    // magnetic fields are cell-centered along the other two directions.
     AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-    Real staggered_coord(int component, int coord_dir, int i, int j, int k,
-                         GpuArray<Real, AMREX_SPACEDIM> const &problo,
-                         GpuArray<Real, AMREX_SPACEDIM> const &dx)
+    Real yee_coord(bool is_electric, int component, int coord_dir, int i, int j, int k,
+                   GpuArray<Real, AMREX_SPACEDIM> const &problo,
+                   GpuArray<Real, AMREX_SPACEDIM> const &dx)
     {
         int idx = (coord_dir == 0) ? i : ((coord_dir == 1) ? j : k);
-        Real offset = (component == coord_dir) ? 0.5_rt : 0.0_rt;
+        Real offset = (is_electric == (component == coord_dir)) ? 0.5_rt : 0.0_rt;
         return problo[coord_dir] + (idx + offset) * dx[coord_dir];
     }
 
     // Gaussian-modulated plane wave along ic_dir: E0 * exp(-(xi-x0)^2/(2 sigma^2)) * cos(k0*(xi-x0))
     // with xi the staggered coordinate along dir for the given field component.
     AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-    Real gaussian_plane_wave(int component, int dir, int i, int j, int k,
+    Real gaussian_plane_wave(bool is_electric, int component, int dir, int i, int j, int k,
                              GpuArray<Real, AMREX_SPACEDIM> const &problo,
                              GpuArray<Real, AMREX_SPACEDIM> const &dx,
                              Real x0, Real sigma, Real k0)
     {
-        Real xi = staggered_coord(component, dir, i, j, k, problo, dx);
+        Real xi = yee_coord(is_electric, component, dir, i, j, k, problo, dx);
         Real dxi = xi - x0;
         Real envelope = std::exp(-dxi * dxi / (2.0_rt * sigma * sigma));
         Real carrier = std::cos(k0 * dxi);
@@ -98,13 +99,13 @@ void InitSetupFields(
 
         ParallelFor(efields[pol], [=] AMREX_GPU_DEVICE(int b, int i, int j, int k)
                     {
-            Real g = gaussian_plane_wave(pol, dir, i, j, k, problo, dx, x0, sigma, k0);
+            Real g = gaussian_plane_wave(true, pol, dir, i, j, k, problo, dx, x0, sigma, k0);
             ea[b](i, j, k) = E0 * g; });
 
         // B = (1/c) k_hat x E at t=0; sample along ic_dir at B_bdir Yee locations
         ParallelFor(bfields[bdir], [=] AMREX_GPU_DEVICE(int b, int i, int j, int k)
                     {
-            Real g = gaussian_plane_wave(bdir, dir, i, j, k, problo, dx, x0, sigma, k0);
+            Real g = gaussian_plane_wave(false, bdir, dir, i, j, k, problo, dx, x0, sigma, k0);
             ba[b](i, j, k) = bsign * B0 * g; });
     }
     else
@@ -116,7 +117,7 @@ void InitSetupFields(
 
         ParallelFor(efields[pol], [=] AMREX_GPU_DEVICE(int b, int i, int j, int k)
                     {
-            Real phase_coord = staggered_coord(pol, dir, i, j, k, problo, dx);
+            Real phase_coord = yee_coord(true, pol, dir, i, j, k, problo, dx);
             Real s = std::sin(kw * phase_coord);
             ea[b](i, j, k) = E0 * s; });
 
@@ -126,7 +127,7 @@ void InitSetupFields(
             // B = (1/c) k_hat x E for a +dir traveling wave at t=0
             ParallelFor(bfields[bdir], [=] AMREX_GPU_DEVICE(int b, int i, int j, int k)
                         {
-                Real phase_coord = staggered_coord(bdir, dir, i, j, k, problo, dx);
+                Real phase_coord = yee_coord(false, bdir, dir, i, j, k, problo, dx);
                 Real s = std::sin(kw * phase_coord);
                 ba[b](i, j, k) = bsign * B0 * s; });
         }
